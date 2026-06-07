@@ -158,7 +158,12 @@ class StateBus:
             ]
 
         if delta.robots_delta is not None:
-            self._robots = list(delta.robots_delta)
+            index = {robot.id: i for i, robot in enumerate(self._robots)}
+            for robot in delta.robots_delta:
+                if robot.id in index:
+                    self._robots[index[robot.id]] = robot
+                else:
+                    self._robots.append(robot)
 
         if delta.pedidos_cola is not None:
             self._pedidos_cola = list(delta.pedidos_cola)
