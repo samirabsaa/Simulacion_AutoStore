@@ -1,0 +1,4 @@
+id_caja,id_sku,cantidad
+C001,SKU-A,10
+,SKU-B,-1
+C003,,8
