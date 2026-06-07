@@ -68,3 +68,24 @@ def test_get_metadata():
     meta = bus.get_metadata()
     assert "tick" in meta
     assert meta["politica"] == "fifo"
+
+
+def test_robots_delta_merges_by_id():
+    """Un delta parcial actualiza solo los robots incluidos — no borra el resto."""
+    bus = StateBus()
+    robot1 = Robot(1, 0, 0, 0, RobotEstado.INACTIVO)
+    robot2 = Robot(2, 5, 5, 0, RobotEstado.INACTIVO)
+    bus.write_tick_delta(
+        M2_WRITER_ID,
+        TickDelta(robots_delta=[robot1, robot2]),
+    )
+
+    robot1_moved = Robot(1, 3, 4, 0, RobotEstado.DESPLAZANDOSE)
+    bus.write_tick_delta(M2_WRITER_ID, TickDelta(robots_delta=[robot1_moved]))
+
+    snap = bus.read_snapshot()
+    robots_by_id = {robot.id: robot for robot in snap.robots}
+    assert robots_by_id[1].x == 3
+    assert robots_by_id[1].estado == RobotEstado.DESPLAZANDOSE
+    assert robots_by_id[2].x == 5
+    assert robots_by_id[2].estado == RobotEstado.INACTIVO
