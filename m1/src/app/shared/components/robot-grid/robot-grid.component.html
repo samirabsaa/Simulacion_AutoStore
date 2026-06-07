@@ -1,0 +1,20 @@
+<div class="occ-heatmap">
+  <div class="occ-heatmap__grid" [style.grid-template-columns]="colTemplate">
+    @for (cell of cells; track cell.key) {
+      <div class="occ-heatmap__cell" [style.background]="cell.color">
+        @if (cell.hasRobot) {
+          <div class="occ-heatmap__robot">{{ cell.robotId }}</div>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="occ-heatmap__legend">
+    @for (r of ramp; track r.cssVar) {
+      <div class="occ-heatmap__legend-item">
+        <span class="occ-heatmap__legend-swatch" [style.background]="'var(' + r.cssVar + ')'"></span>
+        <span>{{ r.label }}</span>
+      </div>
+    }
+  </div>
+</div>

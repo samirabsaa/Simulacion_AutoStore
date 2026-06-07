@@ -1,0 +1,23 @@
+<ion-card class="policy-selector">
+  <ion-card-header>
+    <ion-card-title>Política de Picking</ion-card-title>
+  </ion-card-header>
+  <ion-card-content>
+    <ion-radio-group [value]="selected" (ionChange)="onChange($any($event))">
+      <ion-item lines="none">
+        <ion-radio [value]="PickingPolicy.FIFO" slot="start"></ion-radio>
+        <ion-label>
+          <strong>FIFO</strong>
+          <p>Orden de llegada</p>
+        </ion-label>
+      </ion-item>
+      <ion-item lines="none">
+        <ion-radio [value]="PickingPolicy.PRIORITY_POSITION" slot="start"></ion-radio>
+        <ion-label>
+          <strong>Prioridad Posición</strong>
+          <p>Distancia Manhattan</p>
+        </ion-label>
+      </ion-item>
+    </ion-radio-group>
+  </ion-card-content>
+</ion-card>

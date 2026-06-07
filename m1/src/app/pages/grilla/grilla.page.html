@@ -1,0 +1,22 @@
+<div class="as-page">
+  @if (bus) {
+    <app-bus-strip [bus]="bus"></app-bus-strip>
+  }
+
+  <div class="as-card">
+    <h2 style="margin:0 0 8px;font-size:20px;font-weight:600">Monitor de Grilla</h2>
+    <p style="margin:0 0 24px;color:var(--text-muted);font-size:14px">
+      Vista detallada del estado de cada bin de la grilla AutoStore.
+    </p>
+
+    @if (bus) {
+      <app-robot-grid
+        [gridX]="bus.grid.x"
+        [gridY]="bus.grid.y"
+        [numRobots]="bus.numRobots"
+        [iog]="bus.kpis.IOG"
+        [tick]="bus.tick">
+      </app-robot-grid>
+    }
+  </div>
+</div>

@@ -1,0 +1,110 @@
+<div class="as-page panel">
+
+  <!-- BusStrip -->
+  @if (bus) {
+    <app-bus-strip [bus]="bus"></app-bus-strip>
+  }
+
+  <!-- Controls card: Transport + Mode + Policy -->
+  @if (bus) {
+    <div class="as-card panel__controls">
+      <div class="panel__ctrl-block">
+        <span class="panel__ctrl-label">Control de simulación</span>
+        <app-control-bar
+          [running]="bus.running"
+          [speed]="bus.velocidad"
+          (play)="onPlay()"
+          (pause)="onPause()"
+          (reset)="onReset()"
+          (speedChange)="onSpeedChange($event)">
+        </app-control-bar>
+      </div>
+
+      <div class="panel__ctrl-row">
+        <div class="panel__ctrl-block">
+          <span class="panel__ctrl-label">Modo turno</span>
+          <div class="seg-ctrl">
+            <button class="seg-ctrl__btn"
+                    [class.seg-ctrl__btn--active]="bus.mode === SimMode.DIURNO"
+                    [class.seg-ctrl__btn--day]="true"
+                    (click)="onModeChange(SimMode.DIURNO)">
+              ☀ Diurno · Picking
+            </button>
+            <button class="seg-ctrl__btn"
+                    [class.seg-ctrl__btn--active]="bus.mode !== SimMode.DIURNO"
+                    [class.seg-ctrl__btn--night]="true"
+                    (click)="onModeChange(SimMode.NOCTURNO)">
+              🌙 Nocturno · Reposición
+            </button>
+          </div>
+        </div>
+
+        <div class="panel__ctrl-block">
+          <span class="panel__ctrl-label">Política de picking</span>
+          <div class="seg-ctrl">
+            <button class="seg-ctrl__btn"
+                    [class.seg-ctrl__btn--active]="bus.policy === FIFO"
+                    (click)="onPolicyChange(FIFO)">
+              FIFO
+            </button>
+            <button class="seg-ctrl__btn"
+                    [class.seg-ctrl__btn--active]="bus.policy !== FIFO"
+                    (click)="onPolicyChange(PRIORIDAD)">
+              Prioridad Posición
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- KPI section -->
+  @if (bus) {
+    <div>
+      <div class="panel__kpi-header">
+        <h2 class="panel__kpi-title">KPIs en vivo</h2>
+        <span class="panel__kpi-summary">
+          {{ completados }} / {{ pedidos }} pedidos · {{ cajasPresentes }} de {{ capacidad }} celdas ocupadas
+        </span>
+      </div>
+
+      <div class="panel__kpi-grid">
+        @for (def of kpiDefs; track def.id) {
+          <app-kpi-panel
+            [def]="def"
+            [value]="kpiValues[def.id] || 0"
+            [active]="isKpiActive(def)">
+          </app-kpi-panel>
+        }
+
+        <!-- 8th card: dark scenario summary -->
+        <div class="panel__scenario-card as-card">
+          <span class="panel__scenario-eyebrow">Demostrador</span>
+          <div class="panel__scenario-body">
+            <p class="panel__scenario-sub">Escenario activo</p>
+            <p class="panel__scenario-name">{{ scenarioLabel }}</p>
+            <p class="panel__scenario-seed mono">Semilla {{ bus.semilla }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Occupancy heatmap -->
+  @if (bus) {
+    <div class="as-card">
+      <div class="panel__heatmap-header">
+        <h3 class="panel__heatmap-title">Mapa de Ocupación de la Grilla (IOG)</h3>
+        <span class="panel__heatmap-iog mono">IOG {{ bus.kpis.IOG.toFixed(0) }}%</span>
+      </div>
+      <app-robot-grid
+        [gridX]="bus.grid.x"
+        [gridY]="bus.grid.y"
+        [numRobots]="bus.numRobots"
+        [iog]="bus.kpis.IOG"
+        [tick]="bus.tick">
+      </app-robot-grid>
+    </div>
+  }
+
+</div>

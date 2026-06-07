@@ -1,0 +1,39 @@
+<div class="file-loader">
+  <input #fileInput type="file" accept=".csv" style="display:none" (change)="onFileChange($event)">
+
+  <div class="file-loader__drop-zone" (click)="openPicker()">
+    <ion-icon name="cloud-upload-outline" class="file-loader__icon"></ion-icon>
+    @if (fileName) {
+      <span class="file-loader__name">
+        <ion-icon name="document-text-outline"></ion-icon>
+        {{ fileName }}
+      </span>
+    } @else {
+      <span class="file-loader__placeholder">Haz clic para seleccionar un archivo CSV</span>
+    }
+    <ion-button fill="outline" size="small" color="primary" (click)="$event.stopPropagation(); openPicker()">
+      Seleccionar CSV
+    </ion-button>
+  </div>
+
+  @if (errors.length > 0) {
+    <div class="file-loader__errors">
+      <div class="file-loader__errors-header">
+        <ion-icon name="warning-outline"></ion-icon>
+        {{ errors.length }} error{{ errors.length > 1 ? 'es' : '' }} encontrado{{ errors.length > 1 ? 's' : '' }}
+      </div>
+      <ul class="file-loader__error-list">
+        @for (err of errors; track $index) {
+          <li>{{ err }}</li>
+        }
+      </ul>
+    </div>
+  }
+
+  @if (fileName && errors.length === 0) {
+    <div class="file-loader__success">
+      <ion-icon name="checkmark-circle-outline"></ion-icon>
+      Archivo válido listo para cargar
+    </div>
+  }
+</div>

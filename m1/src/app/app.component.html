@@ -1,0 +1,71 @@
+<ion-app>
+  <div class="shell">
+
+    <!-- ═══════════════ SIDEBAR ═══════════════ -->
+    <aside class="sidebar">
+      <div class="sidebar__brand">
+        <div class="sidebar__brand-title">AutoStore</div>
+        <div class="sidebar__brand-sub">Forus S.A. · Neogística</div>
+      </div>
+
+      <nav class="sidebar__nav">
+        @for (item of nav; track item.key) {
+          <a [routerLink]="item.path"
+             routerLinkActive="sidebar__nav-item--active"
+             class="sidebar__nav-item">
+            <span class="sidebar__nav-accent"></span>
+            <span class="sidebar__nav-icon">{{ item.icon }}</span>
+            <span class="sidebar__nav-label">{{ item.label }}</span>
+          </a>
+        }
+      </nav>
+
+      <div class="sidebar__footer">
+        <div class="sidebar__omni">
+          <span class="sidebar__omni-dot" [class.sidebar__omni-dot--on]="isOmni"></span>
+          <span class="sidebar__omni-label">
+            {{ isOmni ? 'Omniverse · M3 activo' : 'Headless · M3 inactivo' }}
+          </span>
+        </div>
+        <div class="sidebar__version">Simulador AutoStore · M1 UI</div>
+        <div class="sidebar__version">v3.0 · Grupo 12 · PUCV</div>
+      </div>
+    </aside>
+
+    <!-- ═══════════════ MAIN ═══════════════ -->
+    <div class="main">
+
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="topbar__left">
+          <span class="topbar__shift"
+                [class.topbar__shift--day]="isDiurno"
+                [class.topbar__shift--night]="!isDiurno">
+            {{ isDiurno ? '☀' : '🌙' }}
+            {{ isDiurno ? 'Turno Diurno · Picking' : 'Turno Nocturno · Reposición' }}
+          </span>
+        </div>
+
+        <div class="topbar__right">
+          @if (bus) {
+            <div class="topbar__tick">
+              <span class="topbar__tick-label">TICK</span>
+              <span class="topbar__tick-value">{{ tickStr }}</span>
+              <span class="topbar__tick-speed">{{ bus.velocidad }}×</span>
+              <span class="topbar__tick-dot"
+                    [class.topbar__tick-dot--running]="bus.running"></span>
+            </div>
+          }
+          <span class="topbar__clock">{{ displayTime }}</span>
+          <div class="topbar__avatar">OP</div>
+        </div>
+      </header>
+
+      <!-- Content -->
+      <main class="content">
+        <router-outlet></router-outlet>
+      </main>
+    </div>
+
+  </div>
+</ion-app>

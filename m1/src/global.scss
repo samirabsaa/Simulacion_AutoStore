@@ -1,0 +1,109 @@
+/* Core CSS required for Ionic components to work properly */
+@import "@ionic/angular/css/core.css";
+@import "@ionic/angular/css/normalize.css";
+@import "@ionic/angular/css/structure.css";
+@import "@ionic/angular/css/typography.css";
+@import "@ionic/angular/css/display.css";
+
+/* ----------------------------------------------------------------
+   Base resets for light desktop layout
+   ---------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--surface-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+ion-app {
+  background: var(--surface-app);
+}
+
+/* ----------------------------------------------------------------
+   Shared card style (used via .as-card class in templates)
+   ---------------------------------------------------------------- */
+.as-card {
+  background: var(--surface-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.as-card--no-pad {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* ----------------------------------------------------------------
+   Segmented control (shared across pages)
+   ---------------------------------------------------------------- */
+.seg-ctrl {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: #F0F0F0;
+  border-radius: var(--radius-md);
+
+  &__btn {
+    flex: 1;
+    height: 36px;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+    background: transparent;
+    color: var(--text-muted);
+
+    &--active {
+      background: var(--surface-card);
+      color: var(--text-primary);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+
+    &--day#{&}--active { color: #795400; }
+    &--night#{&}--active { color: #1E88E5; }
+  }
+}
+
+/* ----------------------------------------------------------------
+   Page container (each routed page uses this)
+   ---------------------------------------------------------------- */
+.as-page {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 100%;
+}
+
+/* ----------------------------------------------------------------
+   Scrollbar
+   ---------------------------------------------------------------- */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #F5F5F5; }
+::-webkit-scrollbar-thumb { background: #CBCED4; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9E9E9E; }
+
+/* ----------------------------------------------------------------
+   Utility: monospace data
+   ---------------------------------------------------------------- */
+.mono { font-family: var(--font-mono); }
+
+/* ----------------------------------------------------------------
+   T-30 system error alert (Ionic alert override)
+   ---------------------------------------------------------------- */
+.system-error-alert .alert-wrapper {
+  border: 2px solid var(--brand);
+  border-radius: var(--radius-lg);
+  .alert-title { color: var(--brand); font-weight: 700; }
+}

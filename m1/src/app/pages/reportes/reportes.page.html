@@ -1,0 +1,36 @@
+<div class="as-page">
+  @if (bus) {
+    <app-bus-strip [bus]="bus"></app-bus-strip>
+  }
+
+  <div class="as-card">
+    <h2 style="margin:0 0 4px;font-size:20px;font-weight:600">Datos y Reportes</h2>
+    <p style="margin:0 0 24px;color:var(--text-muted);font-size:14px">Genera y descarga reportes comparativos de ejecuciones.</p>
+
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div style="padding:20px;background:var(--surface-app);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-weight:600;font-size:15px">Reporte Comparativo</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">reporte_comp.csv</div>
+        </div>
+        <button style="padding:8px 18px;background:var(--brand);color:#fff;border:none;border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer">
+          ⬇ Descargar
+        </button>
+      </div>
+
+      <div style="padding:20px;background:var(--surface-app);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-weight:600;font-size:15px">Sesión actual</div>
+          @if (bus) {
+            <div style="font-size:13px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">
+              {{ bus.nombreEjecucion }} · tick {{ bus.tick }}
+            </div>
+          }
+        </div>
+        <button style="padding:8px 18px;background:var(--surface-card);color:var(--text-primary);border:1px solid var(--border-card);border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer">
+          ⬇ Exportar sesión
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

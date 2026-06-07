@@ -1,0 +1,364 @@
+@if (bus) {
+<div class="as-page cfg">
+
+  <!-- Page header -->
+  <div class="cfg__top">
+    <div>
+      <h2 class="cfg__heading">Configuración del Escenario</h2>
+      <p class="cfg__sub">Define los parámetros iniciales. Se publican al Bus y alimentan el Motor y Omniverse.</p>
+    </div>
+    <div class="cfg__actions">
+      <button class="cfg__btn-secondary" (click)="null" title="Guardar config.json">
+        💾 Guardar config.json
+      </button>
+      <button class="cfg__btn-primary"
+              [class.cfg__btn-primary--disabled]="!puedeIniciar"
+              [disabled]="!puedeIniciar"
+              (click)="iniciar()">
+        ▶ Iniciar Simulación
+      </button>
+    </div>
+  </div>
+  @if (bloqueo) {
+    <div class="cfg__bloqueo">🔒 {{ bloqueo }}</div>
+  }
+
+  <div class="cfg__grid">
+
+    <!-- ══════ LEFT COLUMN ══════ -->
+    <div class="cfg__col">
+
+      <!-- Dimensiones de grilla -->
+      <div class="as-card cfg__card">
+        <div class="cfg__card-head">
+          <span class="cfg__card-title">Dimensiones de la Grilla (matriz 3D)</span>
+          <button class="cfg__forus-btn"
+                  [class.cfg__forus-btn--active]="isForus"
+                  (click)="restaurarForus()">
+            ↺ {{ isForus ? 'Valores Forus S.A.' : 'Restaurar Forus S.A.' }}
+          </button>
+        </div>
+
+        <div class="cfg__sliders">
+          <div class="cfg__slider-row">
+            <label class="cfg__slider-label">Ancho — X <span class="mono cfg__slider-val">{{ bus.grid.x }}</span></label>
+            <input type="range" min="4" max="20" [value]="bus.grid.x" (input)="setX($event)" class="cfg__range">
+            <div class="cfg__range-limits"><span>4</span><span>20 col</span></div>
+          </div>
+          <div class="cfg__slider-row">
+            <label class="cfg__slider-label">Fondo — Y <span class="mono cfg__slider-val">{{ bus.grid.y }}</span></label>
+            <input type="range" min="4" max="20" [value]="bus.grid.y" (input)="setY($event)" class="cfg__range">
+            <div class="cfg__range-limits"><span>4</span><span>20 col</span></div>
+          </div>
+          <div class="cfg__slider-row">
+            <label class="cfg__slider-label">Altura — Z (niveles) <span class="mono cfg__slider-val">{{ bus.grid.z }}</span></label>
+            <input type="range" min="1" max="10" [value]="bus.grid.z" (input)="setZ($event)" class="cfg__range">
+            <div class="cfg__range-limits"><span>1</span><span>10 niv</span></div>
+          </div>
+          <div class="cfg__capacity">
+            <span class="cfg__capacity-label">Capacidad total</span>
+            <span class="cfg__capacity-val mono">{{ capacidad.toLocaleString('es-CL') }} celdas</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Flota y carga -->
+      <div class="as-card cfg__card">
+        <span class="cfg__card-title">Flota y Carga</span>
+        <div class="cfg__sliders">
+          <div class="cfg__slider-row">
+            <label class="cfg__slider-label">Robots activos <span class="mono cfg__slider-val">{{ bus.numRobots }}</span></label>
+            <input type="range" min="1" max="16" [value]="bus.numRobots" (input)="setR($event)" class="cfg__range">
+            <div class="cfg__range-limits"><span>1</span><span>16</span></div>
+          </div>
+          <div class="cfg__slider-row">
+            <label class="cfg__slider-label">Ocupación inicial <span class="mono cfg__slider-val">{{ bus.ocupacionInicial }}%</span></label>
+            <input type="range" min="20" max="95" [value]="bus.ocupacionInicial" (input)="setOcc($event)" class="cfg__range">
+            <div class="cfg__range-limits"><span>20%</span><span>95%</span></div>
+          </div>
+          <div class="cfg__slider-row">
+            <label class="cfg__slider-label">Pedidos demandados <span class="mono cfg__slider-val">{{ bus.pedidosDemandados }}</span></label>
+            <input type="range" min="20" max="400" [value]="bus.pedidosDemandados" (input)="setPed($event)" class="cfg__range">
+            <div class="cfg__range-limits"><span>20</span><span>400</span></div>
+          </div>
+          <p class="cfg__hint-text">Valores por defecto Forus S.A.: grilla 12×10×5, 8 robots, 78% ocupación, ola de 120 pedidos.</p>
+        </div>
+      </div>
+
+      <!-- Modo, Política, Velocidad -->
+      <div class="as-card cfg__card">
+        <span class="cfg__card-title">Modo, Política y Velocidad</span>
+        <div class="cfg__field-group">
+          <div class="cfg__field">
+            <label class="cfg__field-label">Modo de turno</label>
+            <div class="seg-ctrl">
+              <button class="seg-ctrl__btn"
+                      [class.seg-ctrl__btn--active]="bus.mode === SimMode.DIURNO"
+                      [class.seg-ctrl__btn--day]="bus.mode === SimMode.DIURNO"
+                      (click)="setMode(SimMode.DIURNO)">☀ Diurno · Picking</button>
+              <button class="seg-ctrl__btn"
+                      [class.seg-ctrl__btn--active]="bus.mode !== SimMode.DIURNO"
+                      [class.seg-ctrl__btn--night]="bus.mode !== SimMode.DIURNO"
+                      (click)="setMode(SimMode.NOCTURNO)">🌙 Nocturno · Reposición</button>
+            </div>
+            <p class="cfg__field-hint">Diurno carga ola.csv · Nocturno carga reposicion.csv.</p>
+          </div>
+          <div class="cfg__field">
+            <label class="cfg__field-label">Política de picking</label>
+            <div class="seg-ctrl">
+              <button class="seg-ctrl__btn"
+                      [class.seg-ctrl__btn--active]="bus.policy === PickingPolicy.FIFO"
+                      (click)="setPolicy(PickingPolicy.FIFO)">FIFO</button>
+              <button class="seg-ctrl__btn"
+                      [class.seg-ctrl__btn--active]="bus.policy !== PickingPolicy.FIFO"
+                      (click)="setPolicy(PickingPolicy.PRIORITY_POSITION)">Prioridad Posición</button>
+            </div>
+            <p class="cfg__field-hint">Cambio efectivo en el siguiente tick, sin reiniciar.</p>
+          </div>
+          <div class="cfg__field">
+            <label class="cfg__field-label">Velocidad de simulación</label>
+            <div class="seg-ctrl">
+              @for (v of speedOptions; track v) {
+                <button class="seg-ctrl__btn"
+                        [class.seg-ctrl__btn--active]="bus.velocidad === v"
+                        (click)="setVelocidad(v)">{{ v }}×</button>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /LEFT -->
+
+    <!-- ══════ RIGHT COLUMN ══════ -->
+    <div class="cfg__col">
+
+      <!-- Identificación (T-31) -->
+      <div class="as-card cfg__card">
+        <span class="cfg__card-title">Identificación y Reproducibilidad (T-31 · RNF-04)</span>
+        <div class="cfg__field-group">
+          <div class="cfg__field">
+            <label class="cfg__field-label">Nombre de la ejecución</label>
+            <input class="cfg__input" type="text"
+                   [value]="bus.nombreEjecucion"
+                   (input)="setNombre($event)"
+                   placeholder="p. ej. Ejec_FIFO_78pct">
+            <p class="cfg__field-hint">Identifica la sesión en los reportes comparativos.</p>
+          </div>
+          <div class="cfg__field">
+            <label class="cfg__field-label">Semilla de aleatoriedad</label>
+            <div class="cfg__seed-row">
+              <input class="cfg__input cfg__input--mono" type="number"
+                     [value]="bus.semilla" (input)="setSemilla($event)">
+              <button class="cfg__btn-secondary" (click)="randomSemilla()">🎲 Nueva</button>
+            </div>
+            <p class="cfg__field-hint">Misma semilla + parámetros = misma ejecución (RNF-04).</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Validación de parámetros (T-24) -->
+      <div class="as-card cfg__card">
+        <span class="cfg__card-title">Validación de Parámetros (T-24)</span>
+        <div class="cfg__validations">
+          @for (v of validaciones; track v.msg) {
+            <div class="cfg__validation" [class]="'cfg__validation--' + v.sev">
+              <span class="cfg__validation-icon">
+                @if (v.sev === 'ok')    { ✓ }
+                @if (v.sev === 'warn')  { ⚠ }
+                @if (v.sev === 'error') { ✗ }
+              </span>
+              <span class="cfg__validation-msg">{{ v.msg }}</span>
+            </div>
+          }
+          <div class="cfg__metrics">
+            <div class="cfg__metric">
+              <span class="cfg__metric-label">VRAM estimada (M3)</span>
+              <span class="cfg__metric-val mono" [class.cfg__metric-val--warn]="vramPct >= 80">{{ vramPct.toFixed(0) }}%</span>
+            </div>
+            <div class="cfg__metric">
+              <span class="cfg__metric-label">Capacidad</span>
+              <span class="cfg__metric-val mono">{{ capacidad.toLocaleString('es-CL') }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Estado del sistema (T-30) -->
+      <div class="as-card cfg__card">
+        <div class="cfg__card-head">
+          <span class="cfg__card-title">Estado del Sistema</span>
+          <span class="cfg__card-subtitle">Usuario vs. sistema</span>
+        </div>
+
+        @if (!bus.falloSistema && csvListo) {
+          <div class="cfg__status-ok">
+            <span>✓</span>
+            <p>Sin incidencias. Datos válidos y Motor/Omniverse operativos.</p>
+          </div>
+        }
+
+        @if (bus.falloSistema === 'motor') {
+          <div class="cfg__error-card cfg__error-card--sistema">
+            <div class="cfg__error-bar"></div>
+            <div class="cfg__error-body">
+              <div class="cfg__error-tag">⚡ ERROR DEL SISTEMA</div>
+              <p class="cfg__error-title">El Motor de Simulación no responde</p>
+              <p class="cfg__error-detail"><b>Causa:</b> M2 no publicó un tick en los últimos 5 s.</p>
+              <p class="cfg__error-detail"><b>Acción:</b> Reintenta la conexión. El progreso no se pierde.</p>
+              <button class="cfg__btn-secondary cfg__btn-sm" (click)="clearFallo()">↺ Reintentar conexión</button>
+            </div>
+          </div>
+        }
+
+        @if (bus.falloSistema === 'omniverse') {
+          <div class="cfg__error-card cfg__error-card--sistema">
+            <div class="cfg__error-bar"></div>
+            <div class="cfg__error-body">
+              <div class="cfg__error-tag">⚡ ERROR DEL SISTEMA</div>
+              <p class="cfg__error-title">Se perdió la conexión con NVIDIA Omniverse</p>
+              <p class="cfg__error-detail"><b>Causa:</b> El contexto GPU de M3 dejó de responder.</p>
+              <p class="cfg__error-detail"><b>Acción:</b> Continúa en modo headless; el Motor sigue calculando.</p>
+              <button class="cfg__btn-secondary cfg__btn-sm" (click)="goHeadless()">📴 Continuar en headless</button>
+            </div>
+          </div>
+        }
+
+        <div class="cfg__fallo-sim">
+          <span class="cfg__fallo-label">Simular fallo de sistema:</span>
+          <button class="cfg__fallo-btn"
+                  [class.cfg__fallo-btn--active]="bus.falloSistema === 'motor'"
+                  (click)="setFallo(bus.falloSistema === 'motor' ? null : 'motor')">
+            Motor no responde
+          </button>
+          <button class="cfg__fallo-btn"
+                  [class.cfg__fallo-btn--active]="bus.falloSistema === 'omniverse'"
+                  (click)="setFallo(bus.falloSistema === 'omniverse' ? null : 'omniverse')">
+            Omniverse falla
+          </button>
+        </div>
+        <p class="cfg__hint-text" style="margin-top:8px">👁 El sistema nunca muestra stack traces al usuario final.</p>
+      </div>
+
+    </div><!-- /RIGHT -->
+  </div><!-- /grid -->
+
+  <!-- CSV Validator (T-25 + T-29) -->
+  <div>
+    <h3 class="cfg__section-title">Carga y validación de la ola de datos</h3>
+
+    <div class="as-card as-card--no-pad csv">
+      <!-- Header -->
+      <div class="csv__header">
+        <span class="csv__icon" [style.background]="bus.mode === SimMode.DIURNO ? 'var(--shift-day)' : 'var(--shift-night)'">
+          {{ bus.mode === SimMode.DIURNO ? '📋' : '📦' }}
+        </span>
+        <div class="csv__meta">
+          <div class="csv__filename-row">
+            <span class="csv__filename mono">{{ csvArchivoNombre }}</span>
+            <span class="csv__shift-badge"
+                  [style.background]="bus.mode === SimMode.DIURNO ? 'var(--shift-day)' : 'var(--shift-night)'"
+                  [style.color]="bus.mode === SimMode.DIURNO ? 'var(--text-primary)' : '#fff'">
+              Turno {{ bus.mode === SimMode.DIURNO ? 'Diurno · Picking' : 'Nocturno · Reposición' }}
+            </span>
+          </div>
+          <p class="csv__cols-hint">Columnas: <span class="mono">{{ csvCols.join(', ') }}</span></p>
+        </div>
+        <div class="seg-ctrl">
+          <button class="seg-ctrl__btn" [class.seg-ctrl__btn--active]="csvEstado === 'valido'"   (click)="setCsvEstado(csvCampo, 'valido')">Archivo válido</button>
+          <button class="seg-ctrl__btn" [class.seg-ctrl__btn--active]="csvEstado === 'errores'"  (click)="setCsvEstado(csvCampo, 'errores')">Con errores</button>
+          <button class="seg-ctrl__btn" [class.seg-ctrl__btn--active]="csvEstado === 'no_cargado'" (click)="setCsvEstado(csvCampo, 'no_cargado')">Sin cargar</button>
+        </div>
+      </div>
+
+      @if (!csvResult.cargado) {
+        <div class="csv__empty">
+          <span class="csv__empty-icon">📁</span>
+          <p class="csv__empty-title">Archivo no cargado</p>
+          <p class="csv__empty-hint">Carga <span class="mono">{{ csvArchivoNombre }}</span> para el turno {{ bus.mode === SimMode.DIURNO ? 'diurno' : 'nocturno' }}.</p>
+        </div>
+      } @else {
+        <div class="csv__body">
+          <!-- Summary -->
+          <div class="csv__summary">
+            <div class="csv__sum-item">
+              <span class="csv__sum-label">Filas</span>
+              <span class="csv__sum-val mono">{{ csvResult.total }}</span>
+            </div>
+            <div class="csv__sum-item">
+              <span class="csv__sum-label">Válidas</span>
+              <span class="csv__sum-val mono" style="color:var(--status-online-text)">{{ csvResult.validas }}</span>
+            </div>
+            <div class="csv__sum-item">
+              <span class="csv__sum-label">Con error</span>
+              <span class="csv__sum-val mono" [style.color]="csvResult.errores ? 'var(--brand)' : 'var(--text-faint)'">{{ csvResult.errores }}</span>
+            </div>
+          </div>
+
+          <!-- Table -->
+          <div class="csv__table-wrap">
+            <table class="csv__table">
+              <thead>
+                <tr>
+                  <th class="csv__th">#</th>
+                  @for (col of csvCols; track col) {
+                    <th class="csv__th mono">{{ col }}</th>
+                  }
+                  <th class="csv__th">Validación</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (f of csvResult.filas; track f.n) {
+                  <tr [class.csv__tr--error]="!f.ok">
+                    <td class="csv__td mono csv__td--num">{{ f.n }}</td>
+                    @for (c of f.cells; track $index) {
+                      <td class="csv__td mono" [class.csv__td--empty]="c === ''">{{ c === '' ? '∅' : c }}</td>
+                    }
+                    <td class="csv__td">
+                      @if (f.ok) {
+                        <span class="csv__ok">✓ OK</span>
+                      } @else {
+                        <div class="csv__issues">
+                          @for (is of f.issues; track is.msg) {
+                            <span class="csv__issue">
+                              <span class="csv__issue-badge">{{ issueLabel[is.tipo] }}</span>
+                              {{ is.msg }}
+                            </span>
+                          }
+                        </div>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Verdict -->
+          @if (csvResult.errores > 0) {
+            <div class="csv__verdict csv__verdict--error">
+              <span>✗</span>
+              <p><b>{{ csvResult.errores }} {{ csvResult.errores === 1 ? 'fila inválida' : 'filas inválidas' }}.</b>
+                La simulación no se ejecutará con datos inválidos. Corrige las filas marcadas y vuelve a cargar
+                <span class="mono">{{ csvArchivoNombre }}</span>.</p>
+            </div>
+          } @else {
+            <div class="csv__verdict csv__verdict--ok">
+              <span>✓</span>
+              <p><b>{{ csvResult.total }} filas válidas.</b>
+                Publicado en el Bus — listo para iniciar en modo {{ bus.mode === SimMode.DIURNO ? 'diurno' : 'nocturno' }}.</p>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- config.json preview -->
+  <div class="as-card">
+    <span class="cfg__card-title">Vista previa — config.json</span>
+    <pre class="cfg__json">{{ configJson }}</pre>
+  </div>
+
+</div>
+}
