@@ -138,18 +138,22 @@ class AutoStoreSimulator:
         `pedidos_completados` y acumularlo en `_pedidos_completados_add`
         (recordar que `Pedido` ya no trae campo `estado` — el bus rastrea
         pendientes vs. completados como colecciones separadas, no por
-        estado del objeto). Cada cambio de Caja debe registrarse en
-        `_grilla_delta` / `_grilla_remove` (el bus mergea por celda
-        `(x,y,z)`), y cada evento relevante (`movimiento`, `excavacion`,
-        `caja_recuperada`, `pedido_completado`) en `_eventos_pendientes`.
+        estado del objeto). Cada cambio de Caja va en `_grilla_delta` /
+        `_grilla_remove`, y cada cambio de Robot en `_robots_delta` — el
+        bus mergea ambos por clave (`(x,y,z)` para cajas, `robot.id` para
+        robots), así que basta con incluir SOLO lo que cambió este tick;
+        los robots no incluidos quedan intactos en el snapshot (acuerdo
+        confirmado con Martín — ver punto 5 en docs/guia_integracion_m2_bus.md,
+        ya corregido en bus-persistencia tras detectarlo con el test de
+        contrato). Cada evento relevante (`movimiento`, `excavacion`,
+        `caja_recuperada`, `pedido_completado`) va en `_eventos_pendientes`.
 
-        OJO con `_robots_delta`: a diferencia de `_grilla_delta` (que el bus
-        mergea celda por celda), `StateBus._apply_delta` REEMPLAZA la lista
-        completa de robots (`self._robots = list(delta.robots_delta)`). Hay
-        que volcar ahí el estado de TODOS los robots cada tick — no solo los
-        que se movieron — o el snapshot pierde a los que no se incluyan
-        (ver punto 5 en docs/guia_integracion_m2_bus.md, a confirmar con
-        Martín por si el comportamiento esperado era un merge por `id`).
+        Importante al soltar la carga: cuando un robot entrega o deja de
+        transportar una `Caja`, hay que reportar el `Robot` actualizado
+        con `carga_id=None` en `_robots_delta` — si no se incluye ese
+        cambio, el snapshot seguirá mostrando la carga vieja (punto 3 de
+        los acuerdos: `carga_id` es el `id_caja` que transporta, o `None`
+        si va vacío).
 
         Delega en motor.despachador."""
         raise NotImplementedError

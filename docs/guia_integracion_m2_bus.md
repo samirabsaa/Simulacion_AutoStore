@@ -1,11 +1,14 @@
-# Guía de integración M2 ↔ Bus — notas para Manuel y puntos a confirmar con Martín
+# Guía de integración M2 ↔ Bus — notas para Manuel
 
 Este documento **no reemplaza** la documentación oficial del bus — esa la escribió
 Martín y vive en [`bus_api.md`](bus_api.md) y [`integracion_grupo12.md`](integracion_grupo12.md)
 (rama `bus-persistencia`). Este texto cumple un rol distinto: mostrar concretamente
-**cómo `AutoStoreSimulator` (motor/simulador.py) consume ese contrato real**, y dejar
-una lista de supuestos que tomamos al escribir el esqueleto y que conviene confirmar
-con Martín antes de que Manuel construya la lógica completa sobre ellos.
+**cómo `AutoStoreSimulator` (motor/simulador.py) consume ese contrato real**.
+
+Una primera versión de esta guía dejaba abiertos 5 supuestos que tomamos al
+escribir el esqueleto sin confirmación directa de Martín. Ya los revisamos con
+él — quedaron resueltos en [`docs/acuerdos_diseno_m2.md`](acuerdos_diseno_m2.md)
+y resumidos en la sección 3 más abajo.
 
 > Nota: una versión anterior de este documento (`guia_bus_para_martin.md`) intentaba
 > anticiparle a Martín los cambios que veníamos a pedirle. Quedó obsoleta — Martín ya
@@ -34,7 +37,7 @@ El contrato técnico completo está en `docs/bus_api.md`. Resumen de lo esencial
 |---|---|---|
 | Inicialización | `inicializar_desde_bus()` | Lee `bus.read_snapshot()` — **NO** recibe `config`/`pedidos` por constructor; M1 ya configuró el bus (`set_config`, `set_pedidos_cola`) antes de Play |
 | Releer política cada tick | `avanzar_tick()` lee `snap.politica` al inicio | M2 nunca cambia la política — la fija el operador vía M1 (`bus.set_policy`); no es campo de `TickDelta` |
-| Procesar turno | `_procesar_turno_diurno(politica)` / `_procesar_turno_nocturno()` | Acumulan cambios en buffers internos (`_grilla_delta`, `_grilla_remove`, `_robots_delta`, `_pedidos_completados_add`, `_eventos_pendientes`) |
+| Procesar turno | `_procesar_turno_diurno(politica)` / `_procesar_turno_nocturno()` | Acumulan SOLO lo que cambió este tick en `_grilla_delta`/`_grilla_remove` (merge por celda `(x,y,z)`) y `_robots_delta` (merge por `robot.id` — confirmado y corregido, ver `docs/acuerdos_diseno_m2.md` punto 5); también `_pedidos_completados_add` y `_eventos_pendientes` |
 | Cambiar de turno | `cambiar_modo(nuevo_modo)` | Pasa por `TickDelta.modo` — es M2 quien decide la transición según duración de fase, a diferencia de la política |
 | Resolver colisiones | `_resolver_colisiones()` | Robot pasa a `RobotEstado.BLOQUEADO`; alimenta TBR y genera evento `bloqueo` |
 | Recalcular KPIs | `_actualizar_kpis()` | Produce un `KPISet` (no un dict) para `TickDelta.kpis` |
@@ -43,43 +46,23 @@ El contrato técnico completo está en `docs/bus_api.md`. Resumen de lo esencial
 
 ---
 
-## 3. Puntos a confirmar con Martín
+## 3. Decisiones confirmadas con Martín
 
-Supuestos que tomamos al escribir el esqueleto, sin tener su confirmación directa —
-vale la pena revisarlos juntos antes de que se conviertan en costumbre dentro de M2:
+Los 5 puntos que dejamos abiertos en la primera versión de esta guía (y en el PR
+de `test-integracion-m2-bus`) ya están resueltos — ver el detalle completo en
+[`docs/acuerdos_diseno_m2.md`](acuerdos_diseno_m2.md). Resumen:
 
-1. **`TickDelta.pedidos_cola`** — en `MutableState.apply_delta` vimos que hace
-   `self._pedidos_cola = list(delta.pedidos_cola)`, es decir, **reemplaza la cola
-   completa**. Asumimos que M2 debe reenviar la cola entera (reordenada según la
-   política) cada vez que cambia, no solo deltas de altas/bajas puntuales. ¿Es así
-   como lo pensaste, o esperabas otra forma de reportar cambios en la cola?
+| # | Tema | Decisión |
+|---|---|---|
+| 1 | `pedidos_cola` | Reemplazo completo cuando se incluye (mandar la cola entera reordenada); omitir (`None`) si no cambió. Completados van por `pedidos_completados_add` |
+| 2 | Transiciones de `modo` | Sin validación en el bus — M1 fija el modo inicial vía `set_modo()` antes de Play, M2 decide las transiciones en runtime vía `TickDelta.modo` |
+| 3 | `Robot.carga_id` | Confirmado: `id_caja` de la `Caja` transportada, o `None` si va vacío. Al soltar la carga, M2 debe reportar el `Robot` con `carga_id=None` |
+| 4 | `"prioridad_posicion"` | Confirmado como valor canónico — la corrección que hicimos en `CLAUDE.md` es correcta |
+| 5 | `robots_delta` | **Era un bug real** (reemplazo total de la lista), no comportamiento intencional — Martín lo corrigió: ahora mergea por `robot.id`, igual que `grilla_delta` mergea por celda. M2 debe mandar solo los robots que cambiaron |
 
-2. **Transiciones de `modo`** — `TickDelta.modo` permite que M2 cambie de turno en
-   cualquier tick. ¿Hay alguna validación o expectativa sobre cuándo es válido
-   mandar `NOCTURNO` (p. ej. ¿debe coincidir con algo de `config`, o el motor decide
-   libremente según su propia lógica de duración de turno)?
-
-3. **`Robot.carga_id`** — asumimos que es el `id_caja` de la `Caja` que el robot
-   transporta (por el nombre del campo, ya que no tiene tipo explícito ni ejemplo en
-   el mock de integración). ¿Confirmas esa lectura? Queremos evitar confundirlo con
-   el `tarea_id` que describía el CLAUDE.md original (campo que ya no existe).
-
-4. **Valor de la política de posición** — el CLAUDE.md original decía `"posicion"`;
-   tu enum usa `PoliticaPicking.PRIORIDAD_POSICION = "prioridad_posicion"`. Ya
-   actualizamos el CLAUDE.md para reflejar el valor real — avísanos si M1 espera
-   otra convención de nombres para mostrarlo en la UI.
-
-5. **`TickDelta.robots_delta` — ¿reemplazo completo o delta real?** Esto NO es un
-   supuesto sino algo que detectamos corriendo `tests/test_contrato_m2_bus.py`
-   contra tu implementación: en `StateBus._apply_delta`, `grilla_delta` se
-   mergea celda por celda (`(x, y, z)` como clave), pero `robots_delta` hace
-   `self._robots = list(delta.robots_delta)` — **reemplazo total de la lista**,
-   igual que `pedidos_cola`. Si es intencional, lo anotamos en el esqueleto para
-   que `AutoStoreSimulator` siempre mande el estado de **todos** los robots en
-   `_robots_delta` (no solo los que se movieron este tick) — y así evitar que un
-   robot "desaparezca" del snapshot por no incluirlo en un delta parcial. Si en
-   cambio esperabas un merge por `id` como en `grilla_delta`, avísanos para
-   ajustar `_apply_delta`.
+El punto 5 quedó además fijado como prueba de regresión permanente en
+`tests/test_contrato_m2_bus.py::test_robots_delta_mergea_por_id_no_reemplaza_la_lista`
+— si el comportamiento de reemplazo total reaparece alguna vez, esa prueba falla.
 
 ---
 

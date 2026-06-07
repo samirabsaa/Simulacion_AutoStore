@@ -111,6 +111,40 @@ def test_bus_acepta_y_refleja_el_delta_de_m2(bus_configurado: StateBus):
     assert snap.kpis == kpis
 
 
+def test_robots_delta_mergea_por_id_no_reemplaza_la_lista(bus_configurado: StateBus):
+    """Regresión del bug que detectó esta misma suite: `StateBus._apply_delta`
+    llegó a reemplazar la lista completa de robots con `robots_delta`
+    (`self._robots = list(delta.robots_delta)`), lo que habría borrado del
+    snapshot a cualquier robot no incluido en el delta del tick. Martín lo
+    corrigió para mergear por `robot.id` — igual que `grilla_delta` mergea
+    por celda — y confirmó en los acuerdos de diseño que M2 debe mandar
+    SOLO los robots que cambiaron. Esta prueba deja eso fijado: si el bug
+    reaparece, el segundo `assert` falla porque el robot 2 "desaparecería"."""
+    simulador = AutoStoreSimulator(bus_configurado)
+
+    robot_1 = Robot(id=1, x=0, y=0, z=0, estado=RobotEstado.DESPLAZANDOSE, carga_id=None)
+    robot_2 = Robot(id=2, x=2, y=2, z=0, estado=RobotEstado.INACTIVO, carga_id=None)
+
+    simulador._robots_delta.extend([robot_1, robot_2])
+    simulador.kpis = KPISet()
+    bus_configurado.write_tick_delta(M2_WRITER_ID, simulador._construir_delta())
+
+    # Segundo tick: solo se reporta un cambio en el robot 1 (p. ej. recogió
+    # una caja). El robot 2 no aparece en este delta.
+    robot_1_actualizado = Robot(
+        id=1, x=1, y=0, z=0, estado=RobotEstado.RECUPERANDO, carga_id="C1"
+    )
+    simulador._robots_delta.append(robot_1_actualizado)
+    simulador.kpis = KPISet()
+    bus_configurado.write_tick_delta(M2_WRITER_ID, simulador._construir_delta())
+
+    snap = bus_configurado.read_snapshot()
+    robots_por_id = {r.id: r for r in snap.robots}
+
+    assert robots_por_id[1] == robot_1_actualizado
+    assert robots_por_id[2] == robot_2  # debe seguir intacto, no desaparecer
+
+
 def test_solo_m2_puede_escribir(bus_configurado: StateBus):
     """El single-writer ya no es solo convención: el bus lo hace cumplir
     activamente con `WriterNotAuthorizedError` si el writer_id no es M2."""
