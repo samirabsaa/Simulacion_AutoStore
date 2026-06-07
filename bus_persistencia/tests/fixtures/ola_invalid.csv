@@ -1,0 +1,4 @@
+id_pedido,id_sku,cantidad,destino
+P001,SKU-A,2,Tienda_01
+,SKU-B,0,Tienda_02
+P003,,3,Ecommerce_01
