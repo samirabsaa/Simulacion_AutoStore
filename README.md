@@ -48,15 +48,10 @@ Documentación:
 - [docs/bus_api.md](docs/bus_api.md) — contrato para M1, M2, M3
 - [docs/integracion_grupo12.md](docs/integracion_grupo12.md) — diagrama de integración
 
-### Migración desde `StateBuTemporal.py`
-
-M1 usó un mock en la raíz. La implementación real está en `bus_persistencia/`:
 
 ```python
-# Antes (mock)
-from StateBuTemporal import bus
 
-# Después (producción)
+# Importar
 from bus_persistencia import StateBus
 bus = StateBus()
 ```
