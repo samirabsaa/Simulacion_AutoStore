@@ -69,6 +69,18 @@ vale la pena revisarlos juntos antes de que se conviertan en costumbre dentro de
    actualizamos el CLAUDE.md para reflejar el valor real — avísanos si M1 espera
    otra convención de nombres para mostrarlo en la UI.
 
+5. **`TickDelta.robots_delta` — ¿reemplazo completo o delta real?** Esto NO es un
+   supuesto sino algo que detectamos corriendo `tests/test_contrato_m2_bus.py`
+   contra tu implementación: en `StateBus._apply_delta`, `grilla_delta` se
+   mergea celda por celda (`(x, y, z)` como clave), pero `robots_delta` hace
+   `self._robots = list(delta.robots_delta)` — **reemplazo total de la lista**,
+   igual que `pedidos_cola`. Si es intencional, lo anotamos en el esqueleto para
+   que `AutoStoreSimulator` siempre mande el estado de **todos** los robots en
+   `_robots_delta` (no solo los que se movieron este tick) — y así evitar que un
+   robot "desaparezca" del snapshot por no incluirlo en un delta parcial. Si en
+   cambio esperabas un merge por `id` como en `grilla_delta`, avísanos para
+   ajustar `_apply_delta`.
+
 ---
 
 ## 4. Qué NO está en este documento (y por qué)
