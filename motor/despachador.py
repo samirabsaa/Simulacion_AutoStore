@@ -55,7 +55,8 @@ class Despachador:
 
     def __init__(self, grilla: "Grilla") -> None:
         self.grilla = grilla
-        self._tareas: dict[int, Tarea] = {}   # robot_id -> Tarea activa
+        self._tareas: dict[int, Tarea] = {}      # robot_id -> Tarea activa
+        self._cajas_reservadas: set[tuple[int, int, int]] = set()  # celdas ya asignadas
         self._tick_actual: int = 0
 
     def tick(
@@ -113,8 +114,88 @@ class Despachador:
             (r.x, r.y): r.id for r in robots_estado.values()
         }
 
-        # Paso 3: avanzar cada robot
+        # Paso 2.5: Ceder paso — INACTIVOS se apartan si bloquean
         robots_modificados: list[Robot] = []
+        for robot in list(robots_estado.values()):
+            tarea = self._tareas.get(robot.id)
+            if tarea is None or robot.estado != RobotEstado.BLOQUEADO:
+                continue
+            if tarea.fase == "mover_a_objetivo" and tarea.ruta_entrada:
+                siguiente = tarea.ruta_entrada[0]
+            elif tarea.fase == "mover_a_puerto" and tarea.ruta_salida:
+                siguiente = tarea.ruta_salida[0]
+            else:
+                continue
+            ocupante_id = posiciones_actuales.get(siguiente)
+            if ocupante_id is None:
+                continue
+            ocupante = robots_estado.get(ocupante_id)
+            if ocupante is None or ocupante.estado != RobotEstado.INACTIVO:
+                continue
+            if ocupante_id in self._tareas:
+                continue
+            for ax, ay in self.grilla.columnas_adyacentes(ocupante.x, ocupante.y):
+                if (ax, ay) == (robot.x, robot.y):
+                    continue
+                if (ax, ay) not in posiciones_actuales:
+                    posiciones_actuales.pop((ocupante.x, ocupante.y), None)
+                    posiciones_actuales[(ax, ay)] = ocupante_id
+                    nuevo = Robot(
+                        id=ocupante_id, x=ax, y=ay, z=0,
+                        estado=RobotEstado.INACTIVO, carga_id=None,
+                    )
+                    robots_estado[ocupante_id] = nuevo
+                    robots_modificados.append(nuevo)
+                    eventos.append(_ev_movimiento(nuevo))
+                    break
+
+        # Paso 2.6: Resolver interbloqueo — dos robots BLOQUEADOS que
+        #           ocupan cada uno la celda destino del otro (swap)
+        for robot in list(robots_estado.values()):
+            tarea = self._tareas.get(robot.id)
+            if tarea is None or robot.estado != RobotEstado.BLOQUEADO:
+                continue
+            if tarea.fase == "mover_a_objetivo" and tarea.ruta_entrada:
+                siguiente = tarea.ruta_entrada[0]
+            elif tarea.fase == "mover_a_puerto" and tarea.ruta_salida:
+                siguiente = tarea.ruta_salida[0]
+            else:
+                continue
+            ocupante_id = posiciones_actuales.get(siguiente)
+            if ocupante_id is None or ocupante_id == robot.id:
+                continue
+            ocupante = robots_estado.get(ocupante_id)
+            if ocupante is None or ocupante.estado != RobotEstado.BLOQUEADO:
+                continue
+            otarea = self._tareas.get(ocupante_id)
+            if otarea is None:
+                continue
+            if otarea.fase == "mover_a_objetivo" and otarea.ruta_entrada:
+                o_siguiente = otarea.ruta_entrada[0]
+            elif otarea.fase == "mover_a_puerto" and otarea.ruta_salida:
+                o_siguiente = otarea.ruta_salida[0]
+            else:
+                continue
+            if o_siguiente != (robot.x, robot.y):
+                continue
+            # Ambos quieren la posición del otro → intercambiar
+            posiciones_actuales.pop((robot.x, robot.y), None)
+            posiciones_actuales.pop((siguiente), None)
+            posiciones_actuales[(robot.x, robot.y)] = ocupante_id
+            posiciones_actuales[(siguiente)] = robot.id
+
+            r_a = Robot(id=robot.id, x=siguiente[0], y=siguiente[1], z=robot.z,
+                        estado=RobotEstado.DESPLAZANDOSE, carga_id=robot.carga_id)
+            r_b = Robot(id=ocupante_id, x=robot.x, y=robot.y, z=0,
+                        estado=RobotEstado.DESPLAZANDOSE, carga_id=ocupante.carga_id)
+            robots_estado[robot.id] = r_a
+            robots_estado[ocupante_id] = r_b
+            robots_modificados.append(r_a)
+            robots_modificados.append(r_b)
+            eventos.append(_ev_movimiento(r_a))
+            eventos.append(_ev_movimiento(r_b))
+
+        # Paso 3: avanzar cada robot
         for robot in robots_estado.values():
             tarea = self._tareas.get(robot.id)
             if tarea is None:
@@ -139,6 +220,9 @@ class Despachador:
 
             if completado is not None:
                 pedidos_completados.append(completado)
+                self._cajas_reservadas.discard(
+                    (tarea.caja_objetivo.x, tarea.caja_objetivo.y, tarea.caja_objetivo.z)
+                )
                 del self._tareas[robot.id]
 
         return robots_modificados, grilla_delta, grilla_remove, pedidos_completados, eventos
@@ -147,15 +231,29 @@ class Despachador:
     # Creación de tareas
     # ------------------------------------------------------------------
 
+    def _caja_disponible(self, id_sku: str) -> Caja | None:
+        """Similar a grilla.primera_caja_accesible pero excluye celdas reservadas."""
+        candidatas = self.grilla.buscar_por_sku(id_sku)
+        candidatas = [c for c in candidatas if (c.x, c.y, c.z) not in self._cajas_reservadas]
+        if not candidatas:
+            return None
+
+        def costo_excavacion(c: Caja) -> int:
+            gz = self.grilla.config.grilla.z
+            return sum(1 for z in range(c.z + 1, gz) if self.grilla.ocupada(c.x, c.y, z))
+        return min(candidatas, key=costo_excavacion)
+
     def _crear_tarea(self, robot: Robot, pedido: Pedido) -> Tarea | None:
-        """Busca la caja objetivo y genera la ruta. Retorna None si no hay caja."""
-        caja = self.grilla.primera_caja_accesible(pedido.id_sku)
+        """Busca una caja no reservada y genera la ruta. Retorna None si no hay."""
+        caja = self._caja_disponible(pedido.id_sku)
         if caja is None:
             return None
 
         puerto = self.grilla.puerto_mas_cercano(caja.x, caja.y)
         ruta_entrada = _ruta_xy((robot.x, robot.y), (caja.x, caja.y))
         ruta_salida = _ruta_xy((caja.x, caja.y), puerto)
+
+        self._cajas_reservadas.add((caja.x, caja.y, caja.z))
 
         return Tarea(
             pedido=pedido,
@@ -242,7 +340,36 @@ class Despachador:
                   "a": [ax, ay, z_libre]}
             return nuevo, g_d, g_r, None, [ev]
 
-        # Todas las adyacentes llenas: esperar un tick
+        # Adyacentes llenas: buscar en toda la grilla
+        gx, gy = self.grilla.config.grilla.x, self.grilla.config.grilla.y
+        for ax in range(gx):
+            for ay in range(gy):
+                if (ax, ay) == (caja_mover.x, caja_mover.y):
+                    continue
+                if (ax, ay) in self.grilla.columnas_adyacentes(caja_mover.x, caja_mover.y):
+                    continue  # ya lo intentamos arriba
+                libres = self.grilla.celdas_libres_en_columna(ax, ay)
+                if not libres:
+                    continue
+                z_libre = libres[0]
+                self.grilla.remover(caja_mover.x, caja_mover.y, caja_mover.z)
+                caja_nueva = Caja(
+                    id_caja=caja_mover.id_caja,
+                    id_sku=caja_mover.id_sku,
+                    cantidad=caja_mover.cantidad,
+                    x=ax, y=ay, z=z_libre,
+                )
+                self.grilla.agregar(caja_nueva)
+                acum.total_desplazamientos += 1
+                g_d = [caja_nueva]
+                g_r = [(caja_mover.x, caja_mover.y, caja_mover.z)]
+                nuevo = _cambiar_estado(robot, RobotEstado.EXCAVANDO)
+                ev = {"tipo": "excavacion", "robot_id": robot.id,
+                      "de": [caja_mover.x, caja_mover.y, caja_mover.z],
+                      "a": [ax, ay, z_libre]}
+                return nuevo, g_d, g_r, None, [ev]
+
+        # Toda la grilla llena: esperar un tick
         nuevo = _cambiar_estado(robot, RobotEstado.EXCAVANDO)
         return nuevo, [], [], None, []
 
@@ -252,7 +379,11 @@ class Despachador:
             tarea.caja_objetivo.x, tarea.caja_objetivo.y, tarea.caja_objetivo.z
         )
         if caja is None:
-            # La caja ya no está (caso edge): cancelar tarea
+            # La caja ya no está (caso edge): cancelar tarea y liberar robot
+            self._cajas_reservadas.discard(
+                (tarea.caja_objetivo.x, tarea.caja_objetivo.y, tarea.caja_objetivo.z)
+            )
+            del self._tareas[robot.id]
             nuevo = _cambiar_estado(robot, RobotEstado.INACTIVO, carga_id=None)
             return nuevo, [], [], None, []
 

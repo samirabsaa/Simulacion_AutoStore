@@ -29,12 +29,12 @@ def _grilla_vacia(x=5, y=5, z=3) -> Grilla:
 # ------------------------------------------------------------------
 
 def test_fifo_vs_prioridad_diferente_seleccion():
-    """Con dos SKU a distancias distintas, FIFO y Prioridad eligen diferente."""
+    """FIFO elige el primero en cola; Prioridad elige el más cercano a un puerto."""
     grilla = _grilla_vacia(x=5, y=5, z=3)
-    # SKU001 en (0, 0) — puerto (0,0) a distancia 0
-    grilla.agregar(Caja(id_caja="C1", id_sku="SKU001", cantidad=1, x=0, y=0, z=0))
-    # SKU002 en (4, 4) — puerto (4,4) a distancia 0 (pero su propio puerto lejano)
-    grilla.agregar(Caja(id_caja="C2", id_sku="SKU002", cantidad=1, x=4, y=4, z=0))
+    # SKU001 en el centro (2, 2) — distancia 2 al puerto más cercano
+    grilla.agregar(Caja(id_caja="C1", id_sku="SKU001", cantidad=1, x=2, y=2, z=0))
+    # SKU002 en un puerto (0, 0) — distancia 0
+    grilla.agregar(Caja(id_caja="C2", id_sku="SKU002", cantidad=1, x=0, y=0, z=0))
 
     pedidos = [
         Pedido(id_pedido="P001", id_sku="SKU001", cantidad=1, destino="A"),
@@ -49,10 +49,9 @@ def test_fifo_vs_prioridad_diferente_seleccion():
     assert seleccion_fifo is not None
     assert seleccion_fifo.id_pedido == "P001"
 
-    # Prioridad elige P001 porque SKU001 está en (0,0) más cercano a su puerto
+    # Prioridad elige P002 (SKU002 en (0,0) — distancia 0 al puerto)
     assert seleccion_prioridad is not None
-    # En una grilla 5x5, (0,0) está en una esquina que ES puerto (distancia 0)
-    assert seleccion_prioridad.id_pedido == "P001"
+    assert seleccion_prioridad.id_pedido == "P002"
 
 
 def test_prioridad_selecciona_por_distancia():

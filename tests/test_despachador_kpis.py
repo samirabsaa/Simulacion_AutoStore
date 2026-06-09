@@ -274,4 +274,6 @@ def test_integracion_simulador_turno_diurno(tmp_path):
         if sim.ha_terminado() or len(completados_total) >= 2:
             break
 
-    assert len(completados_total) >= 1
+    assert len(completados_total) == 2, (
+        f"Completó {len(completados_total)}/2 con 2 robots y 2 cajas"
+    )

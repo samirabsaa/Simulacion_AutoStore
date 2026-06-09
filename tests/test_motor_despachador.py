@@ -91,16 +91,16 @@ def test_despachador_excavacion_multi_level():
 # ------------------------------------------------------------------
 
 def test_despachador_colision_bloqueo_conteo():
-    """Dos robots colisionan y se cuenta el tick bloqueado en acum."""
-    grilla = _grilla_vacia()
-    grilla.agregar(Caja(id_caja="C1", id_sku="SKU001", cantidad=1, x=1, y=0, z=0))
-    grilla.agregar(Caja(id_caja="C2", id_sku="SKU001", cantidad=1, x=1, y=1, z=0))
+    """Dos robots convergen a la misma columna — se cuenta el tick bloqueado."""
+    grilla = _grilla_vacia(x=5, y=5, z=3)
+    grilla.agregar(Caja(id_caja="C1", id_sku="SKU001", cantidad=1, x=2, y=1, z=0))
+    grilla.agregar(Caja(id_caja="C2", id_sku="SKU001", cantidad=1, x=2, y=1, z=1))
     grilla.flush_delta()
 
     despachador = Despachador(grilla)
     robots = {
-        0: _robot(id=0, x=0, y=0),
-        1: _robot(id=1, x=0, y=1),
+        0: _robot(id=0, x=0, y=1),
+        1: _robot(id=1, x=4, y=1),
     }
     pedidos = [_pedido(id_pedido="P001"), _pedido(id_pedido="P002")]
     acum = Acumuladores(pedidos_demandados=2)
@@ -114,7 +114,7 @@ def test_despachador_colision_bloqueo_conteo():
         for r in robots_upd:
             robots[r.id] = r
 
-    # Al menos un tick de bloqueo debió ocurrir
+    # Al menos un tick de bloqueo debió ocurrir (ambos convergen a (2,1))
     assert acum.ticks_bloqueados > ticks_bloqueados_antes
 
 

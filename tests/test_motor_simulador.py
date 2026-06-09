@@ -59,7 +59,9 @@ def test_simulador_full_diurno_session():
             break
 
     assert ticks > 0
-    assert len(sim.pedidos_completados) > 0
+    assert len(sim.pedidos_completados) == 2, (
+        f"Completó {len(sim.pedidos_completados)}/2 con 2 robots y 2 cajas en z=0"
+    )
     assert sim.tick > 0
 
 

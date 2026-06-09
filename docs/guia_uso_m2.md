@@ -30,6 +30,10 @@ python -m motor.run --policy fifo --ticks 100
 | `--output` | `output/` | Directorio de salida |
 | `--quiet` | — | Modo silencioso (solo muestra resultado final) |
 | `--compare` | — | Ejecuta FIFO y Prioridad, genera reporte comparativo |
+| `--realtime`, `-r` | — | Modo en vivo: muestra dashboard actualizado cada tick |
+| `--delay` | `0` | Milisegundos de espera entre ticks en modo realtime |
+| `--no-rich` | — | Usa ANSI puro en lugar de rich (más ligero, compatible sin rich) |
+| `--no-clear` | — | No limpia la pantalla entre ticks (útil para depuración) |
 
 ### Ejemplos
 
@@ -45,6 +49,29 @@ python -m motor.run --policy fifo --ticks 100 --quiet
 
 # Demo comparativa P09: ejecuta ambas políticas y genera reporte
 python -m motor.run --compare --ticks 100
+
+# Modo en vivo con dashboard Rich (si rich está instalado)
+python -m motor.run --policy fifo --ticks 50 --realtime --delay 200
+
+# Modo en vivo con ANSI (sin rich, o forzado con --no-rich)
+python -m motor.run --policy prioridad_posicion --ticks 50 -r --delay 100 --no-rich
+
+# Modo DEBUG: no limpia pantalla entre ticks
+python -m motor.run --policy fifo --ticks 30 --realtime --no-clear
+```
+
+### Modo en vivo (realtime)
+
+El flag `--realtime` (o `-r`) muestra un **dashboard animado** que se actualiza cada tick:
+
+- **Con Rich** (default si `rich` está instalado): tabla formateada con colores, barra de progreso, KPIs en línea
+- **Con ANSI** (fallback automático, o forzado con `--no-rich`): misma información, formato de texto simple con códigos ANSI
+- La pantalla se limpia entre ticks (excepto con `--no-clear`)
+- `--delay` controla la velocidad de actualización en milisegundos
+
+Para instalar Rich (opcional):
+```bash
+pip install rich
 ```
 
 ### Salida esperada
@@ -216,8 +243,10 @@ pip install pytest
 
 ### "UnicodeEncodeError" en consola Windows
 
-El runner usa solo caracteres ASCII para compatibilidad con la consola de Windows.
-Si ves caracteres extraños, usa `--quiet` para silenciar la salida.
+El dashboard usa emojis y caracteres Unicode. Si tu consola no los soporta:
+- Usa `--no-rich` para forzar modo ANSI (menos caracteres especiales)
+- Usa `--quiet` para silenciar toda la salida del dashboard
+- O configura la consola con `chcp 65001` para UTF-8
 
 ### Los KPIs no coinciden entre ejecuciones
 
