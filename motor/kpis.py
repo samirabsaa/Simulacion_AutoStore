@@ -1,11 +1,10 @@
-"""motor/kpis.py — Cálculo de los 7 KPIs (T-20). STUB para Manuel.
+"""motor/kpis.py — Cálculo de los 7 KPIs (T-20).
 
-Fórmulas exactas en CLAUDE.md sección "Los 7 KPIs".
-Este archivo lo implementa Manuel Aguilera.
+Fórmulas según CLAUDE.md (sección "Los 7 KPIs").
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from bus_persistencia.models.state import Config, KPISet
@@ -34,14 +33,18 @@ class Acumuladores:
 def calcular_kpis(acum: Acumuladores, grilla: "Grilla", config: Config) -> KPISet:
     """Aplica las 7 fórmulas y retorna un KPISet.
 
-    | KPI  | Fórmula |
-    |------|---------|
-    | TSP  | pedidos_completados / pedidos_demandados * 100 |
-    | TPCP | suma_tiempos_ciclo / pedidos_completados (0 si ninguno) |
-    | MTRP | total_desplazamientos / pedidos_completados (0 si ninguno) |
-    | IOG  | grilla.iog() |
-    | TR   | cajas_recuperadas / ticks_turno_actual (en ticks) |
-    | TI   | cajas_ingresadas / ticks_ingreso (en ticks) |
-    | TBR  | ticks_bloqueados / ticks_totales * 100 |
+    Denominadores protegidos contra división por cero — devuelven 0.0
+    cuando no hay datos suficientes (inicio de sesión).
     """
-    raise NotImplementedError("Manuel implementa calcular_kpis()")
+    n_comp = acum.pedidos_completados
+    n_dem = acum.pedidos_demandados
+
+    tsp = n_comp / n_dem * 100 if n_dem > 0 else 0.0
+    tpcp = acum.suma_tiempos_ciclo / n_comp if n_comp > 0 else 0.0
+    mtrp = acum.total_desplazamientos / n_comp if n_comp > 0 else 0.0
+    iog = grilla.iog()
+    tr = acum.cajas_recuperadas / acum.ticks_turno_actual if acum.ticks_turno_actual > 0 else 0.0
+    ti = acum.cajas_ingresadas / acum.ticks_ingreso if acum.ticks_ingreso > 0 else 0.0
+    tbr = acum.ticks_bloqueados / acum.ticks_totales * 100 if acum.ticks_totales > 0 else 0.0
+
+    return KPISet(TSP=tsp, TPCP=tpcp, MTRP=mtrp, IOG=iog, TR=tr, TI=ti, TBR=tbr)
