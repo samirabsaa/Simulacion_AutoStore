@@ -169,7 +169,7 @@ def test_ambas_politicas_completan():
     # Prioridad
     sim_b = _sim_con_pedidos_y_cajas(pedidos, cajas, seed=42,
                                      cfg=_config(robots=2))
-    sim_b._politica_pendiente = PoliticaPicking.PRIORIDAD_POSICION
+    sim_b.bus.set_policy(PoliticaPicking.PRIORIDAD_POSICION)
     ticks_b = _ejecutar_hasta_completar(sim_b)
 
     for sim, nombre in [(sim_a, "FIFO"), (sim_b, "Prioridad")]:
