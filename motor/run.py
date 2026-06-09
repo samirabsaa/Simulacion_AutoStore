@@ -406,6 +406,7 @@ def ejecutar_sesion(
     bus = StateBus(session_logger=logger)
     bus.set_config(config_result.data)
     bus.set_pedidos_cola(ola_result.data)
+    bus.set_policy(politica)
 
     # --- Configurar metadata ---
     meta = create_execution_metadata(
