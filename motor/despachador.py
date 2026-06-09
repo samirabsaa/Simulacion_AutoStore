@@ -151,14 +151,19 @@ class Despachador:
 
         # Paso 2.6: Resolver interbloqueo — dos robots BLOQUEADOS que
         #           ocupan cada uno la celda destino del otro (swap)
+        robots_movidos_swap: set[int] = set()
         for robot in list(robots_estado.values()):
+            if robot.id in robots_movidos_swap:
+                continue
             tarea = self._tareas.get(robot.id)
             if tarea is None or robot.estado != RobotEstado.BLOQUEADO:
                 continue
             if tarea.fase == "mover_a_objetivo" and tarea.ruta_entrada:
                 siguiente = tarea.ruta_entrada[0]
+                ruta_robot = tarea.ruta_entrada
             elif tarea.fase == "mover_a_puerto" and tarea.ruta_salida:
                 siguiente = tarea.ruta_salida[0]
+                ruta_robot = tarea.ruta_salida
             else:
                 continue
             ocupante_id = posiciones_actuales.get(siguiente)
@@ -172,8 +177,10 @@ class Despachador:
                 continue
             if otarea.fase == "mover_a_objetivo" and otarea.ruta_entrada:
                 o_siguiente = otarea.ruta_entrada[0]
+                ruta_ocupante = otarea.ruta_entrada
             elif otarea.fase == "mover_a_puerto" and otarea.ruta_salida:
                 o_siguiente = otarea.ruta_salida[0]
+                ruta_ocupante = otarea.ruta_salida
             else:
                 continue
             if o_siguiente != (robot.x, robot.y):
@@ -194,9 +201,15 @@ class Despachador:
             robots_modificados.append(r_b)
             eventos.append(_ev_movimiento(r_a))
             eventos.append(_ev_movimiento(r_b))
+            ruta_robot.pop(0)
+            ruta_ocupante.pop(0)
+            acum.total_desplazamientos += 2
+            robots_movidos_swap.update((robot.id, ocupante_id))
 
         # Paso 3: avanzar cada robot
         for robot in robots_estado.values():
+            if robot.id in robots_movidos_swap:
+                continue
             tarea = self._tareas.get(robot.id)
             if tarea is None:
                 # Sin tarea: permanece INACTIVO sin cambios
