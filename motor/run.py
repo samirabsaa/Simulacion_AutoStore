@@ -82,25 +82,27 @@ def _asegurar_cajas_para_skus(sim: AutoStoreSimulator) -> None:
 
     gx = sim._grilla.config.grilla.x
     gy = sim._grilla.config.grilla.y
+    gz = sim._grilla.config.grilla.z
     next_id = len(cajas_existentes) + 1
-    idx = 0
 
     for sku in skus_faltantes:
-        x = idx % gx
-        y = (idx // gx) % gy
-        z = 0
-        while sim._grilla.ocupada(x, y, z):
-            z += 1
-            if z >= sim._grilla.config.grilla.z:
-                idx += 1
-                x = idx % gx
-                y = (idx // gx) % gy
-                z = 0
-        caja = Caja(id_caja=f"C{next_id:05d}", id_sku=sku, cantidad=1, x=x, y=y, z=z)
-        sim._grilla.agregar(caja)
-        next_id += 1
-        idx += 1
-
+        colocado = False
+        for cell_idx in range(gx * gy):
+            x = cell_idx % gx
+            y = (cell_idx // gx) % gy
+            for z in range(gz):
+                if not sim._grilla.ocupada(x, y, z):
+                    caja = Caja(
+                        id_caja=f"C{next_id:05d}", id_sku=sku, cantidad=1, x=x, y=y, z=z
+                    )
+                    sim._grilla.agregar(caja)
+                    next_id += 1
+                    colocado = True
+                    break
+            if colocado:
+                break
+        if not colocado:
+            break
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
