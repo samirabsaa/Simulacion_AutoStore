@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from bus_persistencia.bus.state_bus import StateBus
-from bus_persistencia.models.state import Caja, KPISet, ModoTurno, PoliticaPicking
+from bus_persistencia.models.state import Caja, KPISet, ModoTurno, PoliticaPicking, Robot
 from bus_persistencia.persistence.config_loader import load_config
 from bus_persistencia.persistence.execution_metadata import (
     MetadataStore,
