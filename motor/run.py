@@ -67,42 +67,57 @@ OUTPUT_DIR = ROOT / "output"
 
 
 def _asegurar_cajas_para_skus(sim: AutoStoreSimulator) -> None:
-    """Verifica que todos los SKUs de los pedidos tengan al menos una caja
-    en la grilla. Si falta alguno, agrega una caja sintética."""
-    skus_en_cola = {p.id_sku for p in sim.pedidos_cola}
-    if not skus_en_cola:
+    """Garantiza que haya suficientes cajas para satisfacer la demanda de cada SKU.
+
+    Los datos de ola.csv (SKU-A/B/C) no coinciden con los SKUs sintéticos del
+    relleno aleatorio (SKU001-010), así que inyectamos cajas para los SKUs
+    demandados. Se crea **una caja por pedido** que demande el SKU (descontando
+    las que ya existan), de modo que la demanda se pueda satisfacer al 100%.
+
+    Determinismo: se itera en orden ordenado (no sobre un `set`). La
+    aleatorización de hash de Python haría que el orden de iteración de un set
+    variara entre procesos y rompería la reproducibilidad con semilla fija.
+    """
+    if not sim.pedidos_cola:
         return
+
+    # Demanda: cuántos pedidos requieren cada SKU
+    demanda_por_sku: dict[str, int] = {}
+    for p in sim.pedidos_cola:
+        demanda_por_sku[p.id_sku] = demanda_por_sku.get(p.id_sku, 0) + 1
 
     cajas_existentes = list(sim._grilla._celdas.values())
-    skus_en_grilla = {c.id_sku for c in cajas_existentes}
-    skus_faltantes = skus_en_cola - skus_en_grilla
-
-    if not skus_faltantes:
-        return
+    existentes_por_sku: dict[str, int] = {}
+    for c in cajas_existentes:
+        existentes_por_sku[c.id_sku] = existentes_por_sku.get(c.id_sku, 0) + 1
 
     gx = sim._grilla.config.grilla.x
     gy = sim._grilla.config.grilla.y
     gz = sim._grilla.config.grilla.z
     next_id = len(cajas_existentes) + 1
 
-    for sku in skus_faltantes:
-        colocado = False
-        for cell_idx in range(gx * gy):
-            x = cell_idx % gx
-            y = (cell_idx // gx) % gy
-            for z in range(gz):
-                if not sim._grilla.ocupada(x, y, z):
-                    caja = Caja(
-                        id_caja=f"C{next_id:05d}", id_sku=sku, cantidad=1, x=x, y=y, z=z
-                    )
-                    sim._grilla.agregar(caja)
-                    next_id += 1
-                    colocado = True
+    # Orden ordenado por SKU → colocación reproducible entre corridas
+    for sku in sorted(demanda_por_sku):
+        faltan = demanda_por_sku[sku] - existentes_por_sku.get(sku, 0)
+        for _ in range(max(0, faltan)):
+            colocado = False
+            for cell_idx in range(gx * gy):
+                x = cell_idx % gx
+                y = (cell_idx // gx) % gy
+                for z in range(gz):
+                    if not sim._grilla.ocupada(x, y, z):
+                        caja = Caja(
+                            id_caja=f"C{next_id:05d}", id_sku=sku,
+                            cantidad=1, x=x, y=y, z=z,
+                        )
+                        sim._grilla.agregar(caja)
+                        next_id += 1
+                        colocado = True
+                        break
+                if colocado:
                     break
-            if colocado:
+            if not colocado:
                 break
-        if not colocado:
-            break
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()

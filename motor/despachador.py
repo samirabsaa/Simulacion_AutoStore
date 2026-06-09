@@ -329,9 +329,22 @@ class Despachador:
             tarea.fase = "recuperar"
             return self._fase_recuperar(robot, tarea, acum)
 
-        # Mover la caja más alta a la primera columna adyacente con espacio
+        # Mover la caja más alta a una columna adyacente con espacio.
+        #
+        # Crítico: NO descargar en una columna que sea objetivo de otra tarea
+        # activa. Si dos robots excavan columnas adyacentes y cada uno tira sus
+        # cajas en la columna del otro, ninguna columna baja nunca (ping-pong
+        # infinito → pedidos nunca se completan). Excluir las columnas-objetivo
+        # garantiza que la columna que se excava SOLO pierde cajas → termina.
         caja_mover = max(encima, key=lambda c: c.z)
-        for ax, ay in self.grilla.columnas_adyacentes(caja_mover.x, caja_mover.y):
+        columnas_objetivo = {
+            (t.caja_objetivo.x, t.caja_objetivo.y) for t in self._tareas.values()
+        }
+        adyacentes = self.grilla.columnas_adyacentes(caja_mover.x, caja_mover.y)
+        neutrales = [c for c in adyacentes if c not in columnas_objetivo]
+        # Preferir columnas neutrales; las objetivo solo como último recurso.
+        orden_adyacentes = neutrales + [c for c in adyacentes if c in columnas_objetivo]
+        for ax, ay in orden_adyacentes:
             libres = self.grilla.celdas_libres_en_columna(ax, ay)
             if not libres:
                 continue

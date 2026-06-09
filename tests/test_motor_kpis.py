@@ -50,10 +50,15 @@ def test_mtrp_sin_completados():
 # ------------------------------------------------------------------
 
 def test_tbr_calculo_correcto():
-    """TBR = (ticks_bloqueados / ticks_totales) * 100."""
+    """TBR = ticks_bloqueados / (ticks_totales * n_robots) * 100.
+
+    ticks_bloqueados acumula robot-ticks (suma sobre todos los robots); el
+    denominador debe incluir n_robots para acotar el resultado a [0,100%].
+    """
     grilla = _grilla_vacia()
-    cfg = _config()
-    acum = Acumuladores(ticks_bloqueados=25, ticks_totales=500)
+    cfg = _config(robots=2)
+    # 50 robot-ticks / (500 ticks * 2 robots) = 50/1000 = 5%
+    acum = Acumuladores(ticks_bloqueados=50, ticks_totales=500)
     kpis = calcular_kpis(acum, grilla, cfg)
     assert kpis.TBR == pytest.approx(5.0)
 
