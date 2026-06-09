@@ -219,11 +219,28 @@ def test_kpis_iog_con_cajas():
 
 
 def test_kpis_tbr():
+    """TBR = ticks_bloqueados / (ticks_totales * n_robots) * 100.
+
+    ticks_bloqueados acumula robot-ticks (suma sobre todos los robots), por eso
+    el denominador incluye n_robots — así el resultado queda acotado en [0,100%].
+    """
     grilla = _grilla_vacia()
-    cfg = _config()
-    acum = Acumuladores(ticks_bloqueados=5, ticks_totales=100)
+    cfg = _config(robots=2)
+    # 10 robot-ticks bloqueados / (100 ticks * 2 robots) = 10/200 = 5%
+    acum = Acumuladores(ticks_bloqueados=10, ticks_totales=100)
     kpis = calcular_kpis(acum, grilla, cfg)
     assert kpis.TBR == pytest.approx(5.0)
+
+
+def test_kpis_tbr_acotado():
+    """Regresión: TBR no supera 100% aunque todos los robots estén bloqueados."""
+    grilla = _grilla_vacia()
+    cfg = _config(robots=4)
+    # 4 robots bloqueados los 10 ticks → 40 robot-ticks / (10*4) = 100%
+    acum = Acumuladores(ticks_bloqueados=40, ticks_totales=10)
+    kpis = calcular_kpis(acum, grilla, cfg)
+    assert kpis.TBR == pytest.approx(100.0)
+    assert kpis.TBR <= 100.0
 
 
 def test_kpis_mtrp():
