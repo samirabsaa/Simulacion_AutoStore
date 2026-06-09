@@ -49,6 +49,7 @@ def _ejecutar_sesion(
     bus = StateBus()
     bus.set_config(config_result.data)
     bus.set_pedidos_cola(ola_result.data)
+    bus.set_policy(politica)
 
     sim = AutoStoreSimulator(bus)
     sim.inicializar_desde_bus(seed=seed)
