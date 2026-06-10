@@ -264,93 +264,29 @@
           </div>
           <p class="csv__cols-hint">Columnas: <span class="mono">{{ csvCols.join(', ') }}</span></p>
         </div>
-        <div class="seg-ctrl">
-          <button class="seg-ctrl__btn" [class.seg-ctrl__btn--active]="csvEstado === 'valido'"   (click)="setCsvEstado(csvCampo, 'valido')">Archivo válido</button>
-          <button class="seg-ctrl__btn" [class.seg-ctrl__btn--active]="csvEstado === 'errores'"  (click)="setCsvEstado(csvCampo, 'errores')">Con errores</button>
-          <button class="seg-ctrl__btn" [class.seg-ctrl__btn--active]="csvEstado === 'no_cargado'" (click)="setCsvEstado(csvCampo, 'no_cargado')">Sin cargar</button>
-        </div>
       </div>
 
-      @if (!csvResult.cargado) {
-        <div class="csv__empty">
-          <span class="csv__empty-icon">📁</span>
-          <p class="csv__empty-title">Archivo no cargado</p>
-          <p class="csv__empty-hint">Carga <span class="mono">{{ csvArchivoNombre }}</span> para el turno {{ bus.mode === SimMode.DIURNO ? 'diurno' : 'nocturno' }}.</p>
-        </div>
-      } @else {
-        <div class="csv__body">
-          <!-- Summary -->
-          <div class="csv__summary">
-            <div class="csv__sum-item">
-              <span class="csv__sum-label">Filas</span>
-              <span class="csv__sum-val mono">{{ csvResult.total }}</span>
-            </div>
-            <div class="csv__sum-item">
-              <span class="csv__sum-label">Válidas</span>
-              <span class="csv__sum-val mono" style="color:var(--status-online-text)">{{ csvResult.validas }}</span>
-            </div>
-            <div class="csv__sum-item">
-              <span class="csv__sum-label">Con error</span>
-              <span class="csv__sum-val mono" [style.color]="csvResult.errores ? 'var(--brand)' : 'var(--text-faint)'">{{ csvResult.errores }}</span>
-            </div>
-          </div>
+      <div class="csv__body">
+        <app-file-loader
+          [errors]="csvErrors"
+          [loaded]="csvEstado === 'valido'"
+          (fileSelected)="onCsvFileSelected($event)">
+        </app-file-loader>
 
-          <!-- Table -->
-          <div class="csv__table-wrap">
-            <table class="csv__table">
-              <thead>
-                <tr>
-                  <th class="csv__th">#</th>
-                  @for (col of csvCols; track col) {
-                    <th class="csv__th mono">{{ col }}</th>
-                  }
-                  <th class="csv__th">Validación</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (f of csvResult.filas; track f.n) {
-                  <tr [class.csv__tr--error]="!f.ok">
-                    <td class="csv__td mono csv__td--num">{{ f.n }}</td>
-                    @for (c of f.cells; track $index) {
-                      <td class="csv__td mono" [class.csv__td--empty]="c === ''">{{ c === '' ? '∅' : c }}</td>
-                    }
-                    <td class="csv__td">
-                      @if (f.ok) {
-                        <span class="csv__ok">✓ OK</span>
-                      } @else {
-                        <div class="csv__issues">
-                          @for (is of f.issues; track is.msg) {
-                            <span class="csv__issue">
-                              <span class="csv__issue-badge">{{ issueLabel[is.tipo] }}</span>
-                              {{ is.msg }}
-                            </span>
-                          }
-                        </div>
-                      }
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
+        @if (csvEstado === 'valido') {
+          <div class="csv__verdict csv__verdict--ok">
+            <span>✓</span>
+            <p><b>{{ csvArchivoNombre }} validado correctamente.</b>
+              Publicado en el Bus — listo para iniciar en modo {{ bus.mode === SimMode.DIURNO ? 'diurno' : 'nocturno' }}.</p>
           </div>
-
-          <!-- Verdict -->
-          @if (csvResult.errores > 0) {
-            <div class="csv__verdict csv__verdict--error">
-              <span>✗</span>
-              <p><b>{{ csvResult.errores }} {{ csvResult.errores === 1 ? 'fila inválida' : 'filas inválidas' }}.</b>
-                La simulación no se ejecutará con datos inválidos. Corrige las filas marcadas y vuelve a cargar
-                <span class="mono">{{ csvArchivoNombre }}</span>.</p>
-            </div>
-          } @else {
-            <div class="csv__verdict csv__verdict--ok">
-              <span>✓</span>
-              <p><b>{{ csvResult.total }} filas válidas.</b>
-                Publicado en el Bus — listo para iniciar en modo {{ bus.mode === SimMode.DIURNO ? 'diurno' : 'nocturno' }}.</p>
-            </div>
-          }
-        </div>
-      }
+        } @else if (csvEstado === 'errores') {
+          <div class="csv__verdict csv__verdict--error">
+            <span>✗</span>
+            <p><b>{{ csvArchivoNombre }} contiene filas inválidas.</b>
+              La simulación no se ejecutará con datos inválidos. Corrige los errores indicados arriba y vuelve a cargar el archivo.</p>
+          </div>
+        }
+      </div>
     </div>
   </div>
 

@@ -2,65 +2,15 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { BusClientService, BusState, FORUS_DEFAULTS } from '../../core/services/bus-client.service';
+import { SimApiService } from '../../core/services/sim-api.service';
 import { SimMode, PickingPolicy } from '../../core/enums/sim.enums';
-
-const SKUS    = ['SKU-4821','SKU-1107','SKU-9043','SKU-3390','SKU-7756','SKU-2204'];
-const PUERTOS = ['puerto_1','puerto_2','puerto_3','puerto_4'];
-
-interface CsvRow { n: number; cells: string[]; issues: { tipo: string; msg: string }[]; ok: boolean; }
-
-interface CsvResult { cargado: boolean; filas: CsvRow[]; total: number; validas: number; errores: number; }
-
-function validarFila(tipo: 'ola'|'reposicion', cells: string[]) {
-  const issues: { tipo: string; msg: string }[] = [];
-  const [id, sku, cantidadRaw] = cells;
-  if (!id?.trim()) issues.push({ tipo:'formato', msg:'Identificador vacío' });
-  if (!sku?.trim()) issues.push({ tipo:'formato', msg:'SKU vacío' });
-  else if (!SKUS.includes(sku)) issues.push({ tipo:'sku', msg:`SKU inexistente: ${sku}` });
-  const cant = Number(cantidadRaw);
-  if (cantidadRaw == null || cantidadRaw.trim() === '') issues.push({ tipo:'formato', msg:'Cantidad vacía' });
-  else if (!Number.isFinite(cant)) issues.push({ tipo:'formato', msg:`Cantidad no numérica: "${cantidadRaw}"` });
-  else if (cant <= 0) issues.push({ tipo:'vacio', msg:'Pedido sin unidades (cantidad 0)' });
-  if (tipo === 'ola') {
-    const dest = cells[3];
-    if (!dest?.trim()) issues.push({ tipo:'formato', msg:'Destino vacío' });
-    else if (!PUERTOS.includes(dest)) issues.push({ tipo:'puerto', msg:`Destino inexistente: ${dest}` });
-  }
-  return issues;
-}
-
-const DATASETS: Record<string, Record<string, string[][]>> = {
-  ola: {
-    valido: [
-      ['P-0001','SKU-4821','2','puerto_1'],['P-0002','SKU-1107','1','puerto_2'],
-      ['P-0003','SKU-9043','3','puerto_1'],['P-0004','SKU-3390','1','puerto_3'],
-      ['P-0005','SKU-7756','2','puerto_4'],['P-0006','SKU-2204','1','puerto_2'],
-    ],
-    errores: [
-      ['P-0001','SKU-4821','2','puerto_1'],['P-0002','SKU-1107','0','puerto_2'],
-      ['P-0003','SKU-0000','3','puerto_1'],['P-0004','SKU-3390','dos','puerto_3'],
-      ['P-0005','SKU-7756','2',''],        ['P-0006','SKU-2204','1','puerto_9'],
-    ],
-  },
-  reposicion: {
-    valido: [
-      ['CJ-2001','SKU-4821','1'],['CJ-2002','SKU-3390','1'],
-      ['CJ-2003','SKU-7756','2'],['CJ-2004','SKU-2204','1'],
-    ],
-    errores: [
-      ['CJ-2001','SKU-4821','1'],['CJ-2002','SKU-0000','1'],
-      ['CJ-2003','SKU-7756','0'],['CJ-2004','SKU-2204',''],
-    ],
-  },
-};
-
-const ISSUE_LABEL: Record<string, string> = { formato:'Formato', sku:'SKU', vacio:'Pedido vacío', puerto:'Destino' };
+import { FileLoaderComponent } from '../../shared/components/file-loader/file-loader.component';
 
 @Component({
   selector: 'app-config',
   templateUrl: './config.page.html',
   styleUrls: ['./config.page.scss'],
-  imports: [],
+  imports: [FileLoaderComponent],
 })
 export class ConfigPage implements OnInit, OnDestroy {
   bus: BusState | null = null;
@@ -68,9 +18,17 @@ export class ConfigPage implements OnInit, OnDestroy {
 
   readonly SimMode       = SimMode;
   readonly PickingPolicy = PickingPolicy;
-  readonly issueLabel    = ISSUE_LABEL;
 
-  constructor(private busService: BusClientService, private router: Router) {}
+  private csvErrorsByField: Record<'archivoOla' | 'archivoReposicion', string[]> = {
+    archivoOla: [],
+    archivoReposicion: [],
+  };
+
+  constructor(
+    private busService: BusClientService,
+    private simApi: SimApiService,
+    private router: Router,
+  ) {}
 
   ngOnInit(): void {
     this.sub = this.busService.bus$.subscribe(s => (this.bus = s));
@@ -94,9 +52,31 @@ export class ConfigPage implements OnInit, OnDestroy {
   readonly speedOptions = [1, 2, 5];
   restaurarForus()           { this.busService.restaurarForus(); }
 
-  // ── CSV state simulator ─────────────────────────────────────────────────
-  setCsvEstado(campo: 'archivoOla'|'archivoReposicion', val: 'valido'|'errores'|'no_cargado') {
-    this.busService.setField({ [campo]: val } as any);
+  // ── Carga real de CSV (T-29) ────────────────────────────────────────────
+  onCsvFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    const tipo = this.csvTipo;
+    const campo = this.csvCampo;
+
+    this.simApi.uploadCsv(file, tipo).subscribe({
+      next: (res) => {
+        this.csvErrorsByField[campo] = res.errors.map(e =>
+          e.row > 0 ? `Fila ${e.row} · ${e.column}: ${e.reason}` : `${e.column}: ${e.reason}`
+        );
+        this.busService.setField({ [campo]: res.valid ? 'valido' : 'errores' } as Partial<BusState>);
+      },
+      error: () => {
+        this.csvErrorsByField[campo] = ['No se pudo conectar con el backend para validar el archivo.'];
+        this.busService.setField({ [campo]: 'errores' } as Partial<BusState>);
+      },
+    });
+  }
+
+  get csvErrors(): string[] {
+    return this.csvErrorsByField[this.csvCampo];
   }
 
   get csvTipo(): 'ola'|'reposicion' {
@@ -108,20 +88,7 @@ export class ConfigPage implements OnInit, OnDestroy {
   }
 
   get csvEstado(): 'valido'|'errores'|'no_cargado' {
-    return (this.bus?.[this.csvCampo] as any) ?? 'no_cargado';
-  }
-
-  get csvResult(): CsvResult {
-    const tipo = this.csvTipo;
-    const estado = this.csvEstado;
-    if (estado === 'no_cargado') return { cargado: false, filas: [], total: 0, validas: 0, errores: 0 };
-    const raw = DATASETS[tipo][estado] ?? DATASETS[tipo]['valido'];
-    const filas: CsvRow[] = raw.map((cells, i) => {
-      const issues = validarFila(tipo, cells);
-      return { n: i+1, cells, issues, ok: issues.length === 0 };
-    });
-    const errores = filas.filter(f => !f.ok).length;
-    return { cargado: true, filas, total: filas.length, validas: filas.length - errores, errores };
+    return (this.bus?.[this.csvCampo]) ?? 'no_cargado';
   }
 
   get csvCols(): string[] {
@@ -157,7 +124,7 @@ export class ConfigPage implements OnInit, OnDestroy {
   get paramError(): boolean { return this.capacidad > 8000; }
 
   get csvListo(): boolean {
-    return this.csvResult.cargado && this.csvResult.errores === 0;
+    return this.csvEstado === 'valido';
   }
 
   get puedeIniciar(): boolean {
