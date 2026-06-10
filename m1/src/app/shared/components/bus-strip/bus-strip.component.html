@@ -1,0 +1,48 @@
+@if (bus) {
+  <div class="bus-strip as-card">
+    <div class="bus-strip__header">
+      <span class="bus-strip__icon">⬡</span>
+      <span class="bus-strip__title">Bus de Estado Central</span>
+    </div>
+
+    <div class="bus-strip__divider"></div>
+
+    <div class="bus-strip__chip">
+      <span class="bus-strip__chip-label">Tick</span>
+      <span class="bus-strip__chip-value mono">{{ tickStr }}</span>
+    </div>
+
+    <div class="bus-strip__chip">
+      <span class="bus-strip__chip-label">Modo</span>
+      <span class="bus-strip__chip-value"
+            [style.color]="isDiurno ? 'var(--shift-day)' : 'var(--shift-night)'">
+        {{ modoLabel }}
+      </span>
+    </div>
+
+    <div class="bus-strip__chip">
+      <span class="bus-strip__chip-label">Política</span>
+      <span class="bus-strip__chip-value">{{ politicaLabel }}</span>
+    </div>
+
+    <div class="bus-strip__chip">
+      <span class="bus-strip__chip-label">Semilla</span>
+      <span class="bus-strip__chip-value mono">{{ bus.semilla }}</span>
+    </div>
+
+    <div class="bus-strip__chip">
+      <span class="bus-strip__chip-label">Grilla</span>
+      <span class="bus-strip__chip-value mono">{{ grillaLabel }}</span>
+    </div>
+
+    <div class="bus-strip__chip">
+      <span class="bus-strip__chip-label">Robots</span>
+      <span class="bus-strip__chip-value mono">{{ bus.numRobots }}</span>
+    </div>
+
+    <div class="bus-strip__omni" [class.bus-strip__omni--on]="isOmni">
+      <span class="bus-strip__omni-dot"></span>
+      {{ isOmni ? 'NVIDIA Omniverse · M3 activo' : 'Modo headless · M3 inactivo' }}
+    </div>
+  </div>
+}

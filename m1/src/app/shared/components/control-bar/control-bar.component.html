@@ -1,0 +1,28 @@
+<div class="transport">
+  <!-- Play / Pause toggle + Reset -->
+  <div class="transport__btns">
+    @if (running) {
+      <button class="transport__btn transport__btn--primary" (click)="pause.emit()" title="Pausar">
+        ⏸
+      </button>
+    } @else {
+      <button class="transport__btn transport__btn--primary" (click)="play.emit()" title="Reproducir">
+        ▶
+      </button>
+    }
+    <button class="transport__btn" (click)="reset.emit()" title="Reiniciar">
+      ↺
+    </button>
+  </div>
+
+  <!-- Speed pills -->
+  <div class="transport__speed">
+    @for (s of speeds; track s) {
+      <button class="transport__speed-btn"
+              [class.transport__speed-btn--active]="speed === s"
+              (click)="onSpeed(s)">
+        {{ s }}×
+      </button>
+    }
+  </div>
+</div>

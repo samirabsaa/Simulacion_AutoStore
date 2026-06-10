@@ -1,0 +1,198 @@
+"""api/server.py — bridge FastAPI entre el StateBus de M2 y el frontend M1 (T-45).
+
+Contrato acordado con Alonso (M1):
+  - FastAPI en :8000, Ionic dev server en :8100 (CORS habilitado para ese origen).
+  - WebSocket `ws://localhost:8000/ws/state` empuja `{type: "tick", ...}` por tick.
+  - `kpis` con claves en minúscula + `completados`, `capacidad`, `cajasPresentes`.
+  - `POST /api/upload/{ola|reposicion}` valida CSV y retorna
+    `{valid, errors: [{row, column, value, reason}]}`.
+
+Ejecutar con: `uvicorn api.server:app --reload --port 8000`
+"""
+from __future__ import annotations
+
+import asyncio
+import tempfile
+from pathlib import Path
+from typing import Any
+
+from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from bus_persistencia.bus.state_bus import StateBus
+from bus_persistencia.models.state import Config, GrillaDimensions
+from bus_persistencia.persistence.ola_loader import load_ola
+from bus_persistencia.persistence.reposicion_loader import load_reposicion
+from bus_persistencia.persistence.validation import ValidationResult
+
+from api.loop_worker import SimulationLoop
+from api.serializers import MODO_FROM_M1, POLITICA_FROM_M1, snapshot_to_payload
+
+app = FastAPI(title="AutoStore Simulator Bridge")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8100"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+bus = StateBus()
+_websockets: set[WebSocket] = set()
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _broadcast() -> None:
+    """Notifica a los websockets conectados. Se llama desde el hilo de simulación."""
+    if _main_loop is None or not _websockets:
+        return
+    payload = snapshot_to_payload(bus.read_snapshot(), loop.status, loop.velocidad)
+    for ws in list(_websockets):
+        asyncio.run_coroutine_threadsafe(_send_safe(ws, payload), _main_loop)
+
+
+async def _send_safe(ws: WebSocket, payload: dict[str, Any]) -> None:
+    try:
+        await ws.send_json(payload)
+    except Exception:
+        _websockets.discard(ws)
+
+
+loop = SimulationLoop(bus, on_tick=_broadcast)
+
+
+@app.on_event("startup")
+async def _capture_event_loop() -> None:
+    global _main_loop
+    _main_loop = asyncio.get_running_loop()
+
+
+class GridConfigDTO(BaseModel):
+    """Espejo de `GridConfigDTO` en `m1/src/app/core/models/grid-config.model.ts`."""
+
+    x: int
+    y: int
+    z: int
+    num_robots: int
+    occupancy_pct: float
+    mode: str
+    policy: str
+    session_name: str | None = None
+    semilla: int | None = None
+    pedidos_demandados: int | None = None
+
+
+class PolicyDTO(BaseModel):
+    policy: str
+
+
+class VelocidadDTO(BaseModel):
+    velocidad: int
+
+
+def _validation_to_dto(result: ValidationResult[Any]) -> dict[str, Any]:
+    return {
+        "valid": result.is_valid,
+        "errors": [
+            {"row": e.fila, "column": e.columna, "value": "", "reason": e.error}
+            for e in result.errors
+        ],
+    }
+
+
+@app.get("/snapshot")
+def get_snapshot() -> dict[str, Any]:
+    return snapshot_to_payload(bus.read_snapshot(), loop.status, loop.velocidad)
+
+
+@app.post("/config")
+def post_config(cfg: GridConfigDTO) -> dict[str, Any]:
+    config = Config(
+        grilla=GrillaDimensions(x=cfg.x, y=cfg.y, z=cfg.z),
+        robots=cfg.num_robots,
+        ocupacion_inicial=cfg.occupancy_pct,
+    )
+    modo = MODO_FROM_M1.get(cfg.mode.upper())
+    politica = POLITICA_FROM_M1.get(cfg.policy.upper())
+    loop.configurar(config, seed=cfg.semilla, modo=modo, politica=politica)
+    return {"ok": True}
+
+
+@app.post("/policy")
+def post_policy(body: PolicyDTO) -> dict[str, Any]:
+    politica = POLITICA_FROM_M1.get(body.policy.upper())
+    if politica is None:
+        raise HTTPException(status_code=400, detail=f"Política desconocida: {body.policy!r}")
+    loop.set_politica(politica)
+    return {"ok": True}
+
+
+@app.post("/control/play")
+def control_play() -> dict[str, Any]:
+    try:
+        loop.play()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"ok": True, "status": loop.status}
+
+
+@app.post("/control/pause")
+def control_pause() -> dict[str, Any]:
+    loop.pause()
+    return {"ok": True, "status": loop.status}
+
+
+@app.post("/control/reset")
+def control_reset() -> dict[str, Any]:
+    loop.reset()
+    return {"ok": True, "status": loop.status}
+
+
+@app.post("/control/speed")
+def control_speed(body: VelocidadDTO) -> dict[str, Any]:
+    loop.set_velocidad(body.velocidad)
+    return {"ok": True, "velocidad": loop.velocidad}
+
+
+@app.websocket("/ws/state")
+async def ws_state(websocket: WebSocket) -> None:
+    await websocket.accept()
+    _websockets.add(websocket)
+    try:
+        await websocket.send_json(snapshot_to_payload(bus.read_snapshot(), loop.status, loop.velocidad))
+        while True:
+            # Mantiene la conexión viva; M1 no necesita enviar nada por este canal.
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        _websockets.discard(websocket)
+
+
+@app.post("/api/upload/ola")
+async def upload_ola(file: UploadFile) -> dict[str, Any]:
+    contents = await file.read()
+    tmp_path = Path(tempfile.mkstemp(suffix=".csv")[1])
+    tmp_path.write_bytes(contents)
+    try:
+        result = load_ola(tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    if result.is_valid:
+        bus.set_pedidos_cola(result.data)
+    return _validation_to_dto(result)
+
+
+@app.post("/api/upload/reposicion")
+async def upload_reposicion(file: UploadFile) -> dict[str, Any]:
+    contents = await file.read()
+    tmp_path = Path(tempfile.mkstemp(suffix=".csv")[1])
+    tmp_path.write_bytes(contents)
+    try:
+        result = load_reposicion(tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    if result.is_valid:
+        loop.set_cola_reposicion(result.data)
+    return _validation_to_dto(result)

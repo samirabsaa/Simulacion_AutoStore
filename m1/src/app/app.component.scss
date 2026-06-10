@@ -1,0 +1,181 @@
+.shell {
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+  background: var(--surface-app);
+  font-family: var(--font-sans);
+}
+
+// ── Sidebar ──────────────────────────────────────────────────────────────
+.sidebar {
+  width: var(--sidebar-width);
+  flex: none;
+  background: var(--surface-shell);
+  color: var(--text-on-shell);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  &__brand {
+    padding: 24px;
+    border-bottom: 1px solid var(--border-on-dark);
+    flex: none;
+  }
+
+  &__brand-title { font-size: 18px; font-weight: 600; }
+
+  &__brand-sub {
+    font-size: 12px;
+    color: var(--text-on-shell-dim);
+    margin-top: 2px;
+  }
+
+  &__nav {
+    flex: 1;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+  }
+
+  &__nav-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-on-shell-dim);
+    transition: background 150ms ease, color 150ms ease;
+
+    &:hover {
+      background: rgba(255,255,255,0.05);
+      color: var(--text-on-shell);
+    }
+
+    &--active {
+      background: rgba(255,255,255,0.10) !important;
+      color: #fff !important;
+
+      .sidebar__nav-accent { opacity: 1; }
+    }
+  }
+
+  &__nav-accent {
+    position: absolute;
+    left: 0; top: 6px; bottom: 6px;
+    width: 4px;
+    background: var(--brand);
+    border-radius: 0 3px 3px 0;
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+
+  &__nav-icon { font-size: 16px; width: 20px; text-align: center; flex: none; }
+  &__nav-label { white-space: nowrap; }
+
+  &__footer {
+    padding: 16px;
+    border-top: 1px solid var(--border-on-dark);
+    flex: none;
+    font-size: 12px;
+    color: var(--text-on-shell-faint);
+  }
+
+  &__omni { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+
+  &__omni-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%; flex: none;
+    background: var(--status-idle);
+    &--on { background: var(--status-online); }
+  }
+
+  &__omni-label { color: var(--text-on-shell-dim); font-size: 12px; }
+  &__version { line-height: 1.6; }
+}
+
+// ── Main area ─────────────────────────────────────────────────────────────
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+// ── Topbar ────────────────────────────────────────────────────────────────
+.topbar {
+  height: var(--topbar-height);
+  flex: none;
+  background: var(--surface-card);
+  border-bottom: 1px solid var(--border-card);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+
+  &__left { display: flex; align-items: center; gap: 16px; min-width: 0; }
+
+  &__shift {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 14px;
+    border-radius: var(--radius-pill);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+
+    &--day  { background: var(--shift-day);   color: var(--text-primary); }
+    &--night { background: var(--shift-night); color: #fff; }
+  }
+
+  &__right { display: flex; align-items: center; gap: 20px; flex: none; }
+
+  &__tick {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: var(--surface-shell);
+    border-radius: var(--radius-md);
+    color: #fff;
+  }
+
+  &__tick-label { font-size: 11px; letter-spacing: 0.08em; color: var(--text-on-shell-dim); }
+  &__tick-value { font-family: var(--font-mono); font-size: 15px; font-weight: 600; }
+  &__tick-speed { font-family: var(--font-mono); font-size: 12px; color: var(--text-on-shell-dim); }
+
+  &__tick-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--status-idle);
+    transition: background 300ms, box-shadow 300ms;
+    &--running { background: var(--status-online); box-shadow: 0 0 8px var(--status-online); }
+  }
+
+  &__clock { font-family: var(--font-mono); font-size: 14px; color: var(--text-primary); }
+
+  &__avatar {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--brand);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 14px; flex: none;
+  }
+}
+
+// ── Content area ──────────────────────────────────────────────────────────
+.content {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--surface-app);
+}

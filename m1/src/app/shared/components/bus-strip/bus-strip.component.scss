@@ -1,0 +1,84 @@
+.bus-strip {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 16px 24px;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+  }
+
+  &__icon {
+    font-size: 18px;
+    color: var(--brand);
+  }
+
+  &__title {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  &__divider {
+    width: 1px;
+    height: 32px;
+    background: var(--border-card);
+    flex: none;
+  }
+
+  &__chip {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  &__chip-label {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+
+  &__chip-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+
+  &__omni {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-app);
+    border: 1px solid var(--border-card);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+
+    &--on {
+      background: var(--status-online-bg);
+      border-color: var(--status-online-border);
+      color: var(--status-online-text);
+
+      .bus-strip__omni-dot { background: var(--status-online); }
+    }
+  }
+
+  &__omni-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--status-idle);
+    flex: none;
+  }
+}

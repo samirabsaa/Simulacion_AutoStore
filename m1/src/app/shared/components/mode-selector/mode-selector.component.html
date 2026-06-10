@@ -1,0 +1,23 @@
+<ion-card class="mode-selector">
+  <ion-card-header>
+    <ion-card-title>Modo de Turno</ion-card-title>
+  </ion-card-header>
+  <ion-card-content>
+    <ion-radio-group [value]="selected" (ionChange)="onChange($any($event))">
+      <ion-item lines="none">
+        <ion-radio [value]="SimMode.DIURNO" slot="start"></ion-radio>
+        <ion-label>
+          <strong>Diurno</strong>
+          <p>Picking de pedidos</p>
+        </ion-label>
+      </ion-item>
+      <ion-item lines="none">
+        <ion-radio [value]="SimMode.NOCTURNO" slot="start"></ion-radio>
+        <ion-label>
+          <strong>Nocturno</strong>
+          <p>Reposición de productos</p>
+        </ion-label>
+      </ion-item>
+    </ion-radio-group>
+  </ion-card-content>
+</ion-card>

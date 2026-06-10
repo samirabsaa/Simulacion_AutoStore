@@ -1,0 +1,23 @@
+@if (def) {
+  <div class="kpi-card as-card" [class.kpi-card--inactive]="!active">
+    <div class="kpi-card__header">
+      <span class="kpi-card__code mono">{{ def.code }}</span>
+      <span class="kpi-card__status" [style.color]="statusColor">
+        <span class="kpi-card__status-dot" [style.background]="statusColor"></span>
+        {{ statusLabel }}
+      </span>
+    </div>
+
+    <div class="kpi-card__value-row">
+      <span class="kpi-card__value mono">{{ displayValue }}</span>
+      @if (def.unit) {
+        <span class="kpi-card__unit">{{ def.unit }}</span>
+      }
+    </div>
+
+    <div class="kpi-card__footer">
+      <p class="kpi-card__name">{{ def.name }}</p>
+      <p class="kpi-card__meta">Meta: {{ def.meta }}</p>
+    </div>
+  </div>
+}
