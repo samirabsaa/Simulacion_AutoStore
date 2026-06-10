@@ -53,87 +53,128 @@ Necesitan una **capa de transporte** entre ambos.
 
 ---
 
-## 4. Propuesta recomendada: HTTP polling (Opción A)
+## 4. Solución implementada: bridge FastAPI con WebSocket (Opción B)
+
+> **Actualizado 2026-06-09** — Alonso confirmó que `BusClientService` ya espera un
+> WebSocket (`ws://localhost:8000/ws/state`) que empuja un mensaje `{type: "tick",
+> ...}` por cada tick, no solo polling de `/snapshot`. La Opción B del diagnóstico
+> original es la elegida; `GET /snapshot` se mantiene como fallback de
+> debug/lectura puntual. Implementado en `api/server.py`, `api/serializers.py` y
+> `api/loop_worker.py` (T-45).
 
 ### Arquitectura con bridge
 
 ```
-┌──────────────────┐    HTTP/JSON    ┌────────────────────────────────┐
-│   M1 · Angular   │ ◀────────────── │  api/server.py  (FastAPI)      │
-│  BusClientService│ ──────────────▶ │  GET  /snapshot                │
-│  (reemplazar     │                 │  POST /config                  │
-│   lógica PRNG)   │                 │  POST /control/play            │
-└──────────────────┘                 │  POST /control/pause           │
-                                     │  POST /control/reset           │
-                                     └──────────────┬─────────────────┘
-                                                    │ lee/escribe
-                                                    ▼
-                                          StateBus (Python)
-                                                    │
-                                          AutoStoreSimulator (M2)
+┌──────────────────┐   WS  ws://localhost:8000/ws/state   ┌─────────────────────────────┐
+│   M1 · Angular   │ ◀──────────── push por tick ───────── │  api/server.py  (FastAPI)   │
+│  BusClientService│                                       │  GET  /snapshot             │
+│  (puerto 8100)   │ ───────────── HTTP/JSON ────────────▶ │  POST /config               │
+└──────────────────┘                                       │  POST /policy               │
+                                                            │  POST /control/play|pause   │
+                                                            │       |reset|speed          │
+                                                            │  POST /api/upload/{ola|     │
+                                                            │       reposicion}           │
+                                                            └──────────────┬──────────────┘
+                                                                           │ lee/escribe
+                                                                           ▼
+                                                                 StateBus (Python)
+                                                                           │
+                                                                 AutoStoreSimulator (M2)
+                                                              en threading.Thread (loop_worker)
 ```
 
-### Contrato de los endpoints
+### Contrato de los endpoints (implementado)
 
 ```
 GET  /snapshot
-     → StateSnapshot serializado a JSON
-       { tick, modo, politica, grilla: [...], robots: [...],
-         pedidos: { cola: [...], completados: [...] }, kpis: {...} }
+     → mismo payload que el WS (sin "type"), para lectura puntual/debug
+
+WS   /ws/state
+     → al conectar, envía el snapshot actual; luego un mensaje por tick:
+       { type: "tick", tick, mode: "DIURNO"|"NOCTURNO",
+         policy: "FIFO"|"PRIORIDAD_POSICION", status: "IDLE"|"RUNNING"|"PAUSED"|"FINISHED",
+         velocidad, grid: {x,y,z} | null, robots: [...], grilla: [...],
+         pedidos: { cola: [...], completados: [...] },
+         kpis: { tsp, tpcp, mtrp, iog, tr, ti, tbr, completados, capacidad, cajasPresentes } }
 
 POST /config
-     body: { x, y, z, robots, ocupacion_inicial }
-     → 200 OK
-
-POST /control/play   → inicia el loop de simulación (hilo separado)
-POST /control/pause  → pausa el loop
-POST /control/reset  → resetea el simulador y el bus
+     body (GridConfigDTO): { x, y, z, num_robots, occupancy_pct, mode, policy,
+                              session_name?, semilla?, pedidos_demandados? }
+     → bus.reset(config) + reaplica modo/política/pedidos + inicializa el simulador
 
 POST /policy
-     body: { politica: "fifo" | "prioridad_posicion" }
-     → llama bus.set_policy(PoliticaPicking(value))
+     body: { policy: "FIFO" | "PRIORIDAD_POSICION" }
+     → cambia la política activa (se preserva en /control/reset)
+
+POST /control/play   → inicia/reanuda el loop de simulación (hilo separado)
+POST /control/pause  → pausa el loop
+POST /control/reset  → vuelve al tick inicial con la config/política/pedidos vigentes
+POST /control/speed  body: { velocidad: 1|2|5 } → ajusta ticks/seg
+
+POST /api/upload/ola         multipart "file" → { valid, errors: [{row, column, value, reason}] }
+POST /api/upload/reposicion  multipart "file" → { valid, errors: [{row, column, value, reason}] }
 ```
+
+CORS habilitado para `http://localhost:8100` (`allow_methods=["*"]`,
+`allow_headers=["*"]`).
+
+### Mapeo de enums (M2 ↔ M1) — `api/serializers.py`
+
+| M2 (`bus_persistencia.models.state`) | M1 (`sim.enums.ts`) |
+|---|---|
+| `ModoTurno.DIURNO` / `NOCTURNO` | `"DIURNO"` / `"NOCTURNO"` |
+| `PoliticaPicking.FIFO` / `PRIORIDAD_POSICION` | `"FIFO"` / `"PRIORIDAD_POSICION"` |
+| `RobotEstado` (7 valores) | `RobotState` (5 valores) — `excavando`/`recuperando`/`reponiendo` → `"PICKING"`, `desplazandose` → `"MOVING"`, `bloqueado` → `"BLOCKED"`, `inactivo` → `"IDLE"`, `entregando` → `"DEPOSITING"` |
 
 ### Cambios necesarios en M1
 
-Solo en `bus-client.service.ts`:
-1. Reemplazar el `setInterval` con PRNG por `setInterval` que llama `GET /snapshot`.
-2. Mapear la respuesta JSON al tipo `BusState` que ya usa la UI.
-3. Los métodos de control (`setRunning`, `setMode`, `setPolicy`) pasan a llamar
-   los endpoints `POST /control/...` y `POST /policy`.
+En `bus-client.service.ts`: reemplazar el `BehaviorSubject` con PRNG por una
+conexión a `ws://localhost:8000/ws/state` (URLs en `environment.ts`), y mapear
+los métodos de control (`setRunning`, `setMode`, `setPolicy`, subir CSVs) a los
+endpoints `POST /control/...`, `/policy` y `/api/upload/...`. La UI (dashboard,
+config, grilla view) no necesita cambios — solo cambia de dónde viene el dato.
 
-La UI (dashboard, config, grilla view) **no necesita cambios** — solo cambia
-de dónde viene el dato.
-
-### Archivos a crear en M2
+### Archivos creados en M2
 
 ```
 api/
-├── server.py        # FastAPI app + endpoints
-├── serializers.py   # StateSnapshot → dict JSON (camelCase para Angular)
-└── loop.py          # loop de simulación en hilo separado
+├── __init__.py
+├── server.py        # FastAPI app, CORS, endpoints REST + WS
+├── serializers.py   # mapeos de enums + snapshot_to_payload
+└── loop_worker.py   # SimulationLoop (hilo, play/pause/reset/speed)
 ```
 
-Dependencia adicional: `fastapi` + `uvicorn` (agregar a `requirements.txt`).
+Dependencias agregadas a `requirements.txt`: `fastapi`, `uvicorn[standard]`,
+`httpx`, `python-multipart`.
 
 ---
 
-## 5. Preguntas abiertas para coordinar con Alonso
+## 5. Preguntas abiertas — respondidas por Alonso (2026-06-09)
 
-1. **Puerto del servidor**: ¿`localhost:8000`? ¿Necesita CORS habilitado para el dev server de Ionic?
-2. **Frecuencia de polling en M1**: ¿cada 500ms? ¿Cada tick del motor?
-3. **Formato de fechas y enums**: ¿M1 espera `"fifo"` o `"FIFO"`? Revisar el tipo `BusState` de M1.
-4. **Autenticación**: Para el PoC académico no es necesaria. Confirmar.
-5. **Manejo de errores en M1**: ¿Qué muestra la UI si el servidor Python no está corriendo?
+1. **Puerto del servidor**: FastAPI en `:8000`, Ionic dev server en `:8100`. CORS
+   habilitado para `http://localhost:8100`. ✅ Implementado en `api/server.py`.
+2. **Frecuencia/transporte**: no es polling — M1 espera **WebSocket**
+   (`ws://localhost:8000/ws/state`) con un push por cada tick del motor.
+   ✅ Implementado (`SimulationLoop` notifica a los websockets conectados tras
+   cada `avanzar_tick()`).
+3. **Formato de enums**: M1 espera **mayúsculas** (`"FIFO"`, `"DIURNO"`,
+   `"PRIORIDAD_POSICION"`, etc.) y `kpis` con claves en **minúscula** (`tsp`,
+   `tpcp`, ...) más `completados`, `capacidad`, `cajasPresentes`. ✅ Mapeos en
+   `api/serializers.py`.
+4. **Autenticación**: no es necesaria para el PoC académico. Confirmado.
+5. **Manejo de errores en M1**: fuera del alcance de M2 — responsabilidad de
+   `BusClientService` (reconexión de WebSocket, estado "desconectado" en la UI).
+6. **Carga de CSV**: `POST /api/upload/{ola|reposicion}` multipart, responde
+   `{valid, errors: [{row, column, value, reason}]}`. ✅ Implementado reusando
+   `load_ola`/`load_reposicion` de `bus_persistencia.persistence`.
 
 ---
 
 ## 6. Próximos pasos recomendados
 
-| Prioridad | Tarea | Responsable |
-|-----------|-------|-------------|
-| Alta | Crear `api/server.py` con FastAPI (endpoints básicos) | Vicente |
-| Alta | Actualizar `BusClientService` para consumir HTTP | Alonso |
-| Media | Definir formato JSON de `StateSnapshot` (serializers.py) | Vicente + Alonso |
-| Media | Test de integración completo: M2 corriendo + M1 conectado | Vicente + Alonso |
-| Baja | Migrar a WebSocket si el polling resulta demasiado lento | — |
+| Prioridad | Tarea | Responsable | Estado |
+|-----------|-------|-------------|--------|
+| Alta | Crear `api/server.py` con FastAPI + WebSocket | Vicente | ✅ Hecho (T-45) |
+| Alta | Actualizar `BusClientService` para consumir el WebSocket real | Alonso | Pendiente |
+| Media | Definir formato JSON de `StateSnapshot` (serializers.py) | Vicente + Alonso | ✅ Hecho |
+| Media | Test de integración completo: M2 corriendo + M1 conectado | Vicente + Alonso | Pendiente |
