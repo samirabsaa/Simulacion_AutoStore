@@ -63,11 +63,15 @@ def pedido_to_dict(pedido: Pedido) -> dict[str, Any]:
 def snapshot_to_payload(snapshot: StateSnapshot, status: str, velocidad: int) -> dict[str, Any]:
     """Construye el payload `{type: 'tick', ...}` que espera `ws/state`.
 
-    `kpis` usa claves en minúscula (tsp, tpcp, ...) más los campos auxiliares
-    `completados`, `capacidad` y `cajasPresentes`, según el contrato de M1
-    (`KpisComputed` en `bus-client.service.ts`).
+    `kpis` incluye tanto las claves en minúscula (tsp, tpcp, ...) como las
+    claves originales en mayúscula (TSP, TPCP, ...) — esta última forma es la
+    que ya usa `KpisComputed` en `bus-client.service.ts` (consumida por
+    dashboard/reportes/etc.), así M1 no necesita refactorizar esos componentes.
+    Además se agregan los campos auxiliares `completados`, `capacidad` y
+    `cajasPresentes`, también parte de `KpisComputed`.
     """
-    kpis = {k.lower(): v for k, v in snapshot.kpis.as_dict().items()}
+    kpis_mayus = snapshot.kpis.as_dict()
+    kpis = {**kpis_mayus, **{k.lower(): v for k, v in kpis_mayus.items()}}
     kpis["completados"] = len(snapshot.pedidos.completados)
     kpis["capacidad"] = snapshot.config.grilla.capacidad_total if snapshot.config else 0
     kpis["cajasPresentes"] = len(snapshot.grilla)
