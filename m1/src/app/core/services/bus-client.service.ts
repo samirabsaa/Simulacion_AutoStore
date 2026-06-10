@@ -135,7 +135,9 @@ export class BusClientService implements OnDestroy {
       mode:      (msg.mode as SimMode)         ?? s.mode,
       policy:    (msg.policy as PickingPolicy) ?? s.policy,
       grid,
-      numRobots: Array.isArray(msg.robots) ? msg.robots.length : s.numRobots,
+      // El bridge devuelve `robots: []` antes de que M1 envíe /config (aún no
+      // hay simulación configurada) — no pisar el valor local con 0 en ese caso.
+      numRobots: Array.isArray(msg.robots) && msg.robots.length > 0 ? msg.robots.length : s.numRobots,
       kpis,
     });
   }
