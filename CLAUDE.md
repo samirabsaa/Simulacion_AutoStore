@@ -73,9 +73,10 @@ Simulacion_AutoStore/
 │   ├── config.json        # Parámetros de ejemplo (datos sintéticos)
 │   ├── ola.csv            # Ola de pedidos de ejemplo (datos sintéticos)
 │   └── reposicion.csv     # Cajas a reponer de ejemplo (datos sintéticos)
-└── docs/
+└──     docs/
     ├── bus_api.md             # Contrato técnico del bus (Martín)
-    └── integracion_grupo12.md # Diagrama de integración M1/M2/M3/Bus (Martín)
+    ├── integracion_grupo12.md # Diagrama de integración M1/M2/M3/Bus (Martín)
+    └── coordinacion_robots.md # Plan de coordinación de tráfico M2 (pendiente)
 ```
 
 ---

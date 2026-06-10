@@ -12,7 +12,10 @@ Ejecutar con: `uvicorn api.server:app --reload --port 8000`
 from __future__ import annotations
 
 import asyncio
+import os
 import tempfile
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -28,15 +31,6 @@ from bus_persistencia.persistence.validation import ValidationResult
 
 from api.loop_worker import SimulationLoop
 from api.serializers import MODO_FROM_M1, POLITICA_FROM_M1, snapshot_to_payload
-
-app = FastAPI(title="AutoStore Simulator Bridge")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:8100"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 bus = StateBus()
 _websockets: set[WebSocket] = set()
@@ -62,10 +56,21 @@ async def _send_safe(ws: WebSocket, payload: dict[str, Any]) -> None:
 loop = SimulationLoop(bus, on_tick=_broadcast)
 
 
-@app.on_event("startup")
-async def _capture_event_loop() -> None:
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     global _main_loop
     _main_loop = asyncio.get_running_loop()
+    yield
+
+
+app = FastAPI(title="AutoStore Simulator Bridge", lifespan=_lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8100"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class GridConfigDTO(BaseModel):
@@ -173,7 +178,9 @@ async def ws_state(websocket: WebSocket) -> None:
 @app.post("/api/upload/ola")
 async def upload_ola(file: UploadFile) -> dict[str, Any]:
     contents = await file.read()
-    tmp_path = Path(tempfile.mkstemp(suffix=".csv")[1])
+    fd, tmp_str = tempfile.mkstemp(suffix=".csv")
+    os.close(fd)
+    tmp_path = Path(tmp_str)
     tmp_path.write_bytes(contents)
     try:
         result = load_ola(tmp_path)
@@ -187,7 +194,9 @@ async def upload_ola(file: UploadFile) -> dict[str, Any]:
 @app.post("/api/upload/reposicion")
 async def upload_reposicion(file: UploadFile) -> dict[str, Any]:
     contents = await file.read()
-    tmp_path = Path(tempfile.mkstemp(suffix=".csv")[1])
+    fd, tmp_str = tempfile.mkstemp(suffix=".csv")
+    os.close(fd)
+    tmp_path = Path(tmp_str)
     tmp_path.write_bytes(contents)
     try:
         result = load_reposicion(tmp_path)
