@@ -5,3 +5,6 @@ output/
 *.egg-info/
 .venv/
 venv/
+.venv-test/
+_noop/
+demo_local.py
