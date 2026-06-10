@@ -228,20 +228,11 @@ class AutoStoreSimulator:
             self.cola_reposicion = self.cola_reposicion[n:]
 
     def _resolver_colisiones(self) -> None:
-        """Cesión de paso: robot espera 1 tick si su celda destino está
-        ocupada por otro robot — lo marca como BLOQUEADO y acumula TBR.
-
-        Nota: el despachador (T-17 — Manuel) asigna las rutas y aplica la
-        cesión tick a tick. Este método solo consolida el conteo de bloqueos
-        para los robots que el despachador ya marcó como BLOQUEADO."""
+        """Cesión de paso: el despachador ya maneja los bloqueos y emite eventos.
+        Este método queda como stub para preservar el ciclo de tick."""
         for robot in self.robots.values():
             if robot.estado == RobotEstado.BLOQUEADO:
-                self._acum.ticks_bloqueados += 1
-                self._eventos_pendientes.append({
-                    "tipo": "bloqueo",
-                    "robot_id": robot.id,
-                    "x": robot.x, "y": robot.y, "z": robot.z,
-                })
+                pass  # evento ya emitido por el despachador
 
     # ------------------------------------------------------------------
     # KPIs — delega en motor.kpis (Manuel — T-20)
