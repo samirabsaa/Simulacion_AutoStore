@@ -45,6 +45,11 @@ def calcular_kpis(acum: Acumuladores, grilla: "Grilla", config: Config) -> KPISe
     iog = grilla.iog()
     tr = acum.cajas_recuperadas / acum.ticks_turno_actual if acum.ticks_turno_actual > 0 else 0.0
     ti = acum.cajas_ingresadas / acum.ticks_ingreso if acum.ticks_ingreso > 0 else 0.0
-    tbr = acum.ticks_bloqueados / acum.ticks_totales * 100 if acum.ticks_totales > 0 else 0.0
+    # TBR mide la fracción de tiempo-robot bloqueado. ticks_bloqueados acumula
+    # robot-ticks (suma sobre TODOS los robots), así que el denominador debe ser
+    # ticks_totales × n_robots para que el resultado quede acotado en [0, 100%].
+    # (Dividir solo por ticks_totales daba TBR > 100% con varios robots.)
+    robot_ticks = acum.ticks_totales * config.robots
+    tbr = acum.ticks_bloqueados / robot_ticks * 100 if robot_ticks > 0 else 0.0
 
     return KPISet(TSP=tsp, TPCP=tpcp, MTRP=mtrp, IOG=iog, TR=tr, TI=ti, TBR=tbr)
