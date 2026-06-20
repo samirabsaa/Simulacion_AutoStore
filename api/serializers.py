@@ -43,12 +43,19 @@ ROBOT_ESTADO_TO_M1: dict[RobotEstado, str] = {
     RobotEstado.REPONIENDO: "PICKING",
     RobotEstado.BLOQUEADO: "BLOCKED",
     RobotEstado.ENTREGANDO: "DEPOSITING",
+    # Estados M3: el robot sigue parado/transitando, M1 los muestra como MOVING/BLOCKED
+    RobotEstado.ROTANDO: "MOVING",
+    RobotEstado.NECESITA_HANDOFF: "BLOCKED",
+    RobotEstado.EN_TRANSITO_ANILLO: "MOVING",
 }
 
 
 def robot_to_dict(robot: Robot) -> dict[str, Any]:
     data = asdict(robot)
     data["estado"] = ROBOT_ESTADO_TO_M1.get(robot.estado, "IDLE")
+    # orientacion es un str-Enum; exponer su valor ("N"/"E"/"O") para M1/M3
+    if "orientacion" in data and hasattr(data["orientacion"], "value"):
+        data["orientacion"] = data["orientacion"].value
     return data
 
 
