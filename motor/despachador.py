@@ -17,7 +17,22 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from bus_persistencia.models.state import Caja, Pedido, PoliticaPicking, Robot, RobotEstado
+from bus_persistencia.models.state import (
+    Caja,
+    Estacion,
+    Orientacion,
+    Pedido,
+    PoliticaPicking,
+    Robot,
+    RobotEstado,
+)
+from motor.colmena import (
+    COSTO_ROTACION_TICKS,
+    RADIO_HANDOFF,
+    ReservationTable,
+    WaitForGraph,
+    distancia_manhattan,
+)
 from motor.politicas import POLITICAS
 
 if TYPE_CHECKING:
@@ -39,6 +54,9 @@ class Tarea:
     fase: str = field(default="mover_a_objetivo")
     tick_inicio: int = field(default=0)
     # fases: mover_a_objetivo | excavar | recuperar | mover_a_puerto | entregar
+    # --- Extensiones M3 ---
+    estacion: Estacion | None = field(default=None)  # estación de entrega (Feature 2)
+    ticks_rotando: int = field(default=0)            # ticks ya girando (Feature 3)
 
 
 # ------------------------------------------------------------------
@@ -58,6 +76,24 @@ class Despachador:
         self._tareas: dict[int, Tarea] = {}      # robot_id -> Tarea activa
         self._cajas_reservadas: set[tuple[int, int, int]] = set()  # celdas ya asignadas
         self._tick_actual: int = 0
+
+        # --- Mente Colmena (Feature 4) ---
+        # Estaciones Cinta/Carrusel declaradas en config; () = modo puerto clásico.
+        self.estaciones: tuple[Estacion, ...] = tuple(
+            getattr(grilla.config, "estaciones", ()) or ()
+        )
+        self._estaciones_por_pos: dict[tuple[int, int], Estacion] = {
+            (e.x, e.y): e for e in self.estaciones
+        }
+        self._servidos: dict[str, int] = {}          # estacion_id -> servidos este tick
+        self._espera_handoff: dict[int, int] = {}    # robot_id -> ticks esperando (aging)
+        self.reservation_table = ReservationTable()
+        self.wait_for_graph = WaitForGraph()
+
+    @property
+    def usa_estaciones(self) -> bool:
+        """True si hay estaciones Cinta/Carrusel configuradas (activa Features 2/3/4)."""
+        return bool(self.estaciones)
 
     def tick(
         self,
@@ -88,6 +124,11 @@ class Despachador:
         pedidos_completados: list[Pedido] = []
         eventos: list[dict] = []
 
+        # Mente Colmena: reiniciar estado transitorio del tick (Feature 4).
+        self._servidos = {e.id: 0 for e in self.estaciones}
+        self.reservation_table.reset()
+        self.wait_for_graph.reset()
+
         # Copia mutable del estado de robots para este tick
         robots_estado: dict[int, Robot] = dict(robots)
 
@@ -113,9 +154,16 @@ class Despachador:
         posiciones_actuales: dict[tuple[int, int], int] = {
             (r.x, r.y): r.id for r in robots_estado.values()
         }
+        self.reservation_table.sembrar(posiciones_actuales)
+
+        # Paso 2.4: Mente Colmena — handoff de orientación (Feature 4).
+        # Un robot cargado y mal orientado en su estación cede la carga a un
+        # vecino ocioso ya orientado, evitando el costo de rotación.
+        robots_modificados: list[Robot] = []
+        if self.usa_estaciones:
+            self._handoff_prepass(robots_estado, robots_modificados, eventos)
 
         # Paso 2.5: Ceder paso — INACTIVOS se apartan si bloquean
-        robots_modificados: list[Robot] = []
         for robot in list(robots_estado.values()):
             tarea = self._tareas.get(robot.id)
             if tarea is None or robot.estado != RobotEstado.BLOQUEADO:
@@ -143,6 +191,7 @@ class Despachador:
                     nuevo = Robot(
                         id=ocupante_id, x=ax, y=ay, z=0,
                         estado=RobotEstado.INACTIVO, carga_id=None,
+                        orientacion=ocupante.orientacion,
                     )
                     robots_estado[ocupante_id] = nuevo
                     robots_modificados.append(nuevo)
@@ -192,9 +241,11 @@ class Despachador:
             posiciones_actuales[(siguiente)] = robot.id
 
             r_a = Robot(id=robot.id, x=siguiente[0], y=siguiente[1], z=robot.z,
-                        estado=RobotEstado.DESPLAZANDOSE, carga_id=robot.carga_id)
+                        estado=RobotEstado.DESPLAZANDOSE, carga_id=robot.carga_id,
+                        orientacion=robot.orientacion)
             r_b = Robot(id=ocupante_id, x=robot.x, y=robot.y, z=0,
-                        estado=RobotEstado.DESPLAZANDOSE, carga_id=ocupante.carga_id)
+                        estado=RobotEstado.DESPLAZANDOSE, carga_id=ocupante.carga_id,
+                        orientacion=ocupante.orientacion)
             robots_estado[robot.id] = r_a
             robots_estado[ocupante_id] = r_b
             robots_modificados.append(r_a)
@@ -262,7 +313,13 @@ class Despachador:
         if caja is None:
             return None
 
-        puerto = self.grilla.puerto_mas_cercano(caja.x, caja.y)
+        # Destino de entrega: estación más cercana (Feature 2) o puerto clásico.
+        estacion = self._estacion_mas_cercana(caja.x, caja.y)
+        if estacion is not None:
+            puerto = (estacion.x, estacion.y)
+        else:
+            puerto = self.grilla.puerto_mas_cercano(caja.x, caja.y)
+
         ruta_entrada = _ruta_xy((robot.x, robot.y), (caja.x, caja.y))
         ruta_salida = _ruta_xy((caja.x, caja.y), puerto)
 
@@ -274,7 +331,15 @@ class Despachador:
             ruta_entrada=ruta_entrada,
             ruta_salida=ruta_salida,
             puerto=puerto,
+            estacion=estacion,
         )
+
+    def _estacion_mas_cercana(self, x: int, y: int) -> Estacion | None:
+        """Estación con menor distancia Manhattan a la columna (x,y), o None si
+        no hay estaciones configuradas (modo puerto clásico)."""
+        if not self.estaciones:
+            return None
+        return min(self.estaciones, key=lambda e: distancia_manhattan((e.x, e.y), (x, y)))
 
     # ------------------------------------------------------------------
     # Avance de un robot un paso (máquina de estados)
@@ -321,7 +386,8 @@ class Despachador:
         tarea.ruta_entrada.pop(0)
         acum.total_desplazamientos += 1
         nuevo = Robot(id=robot.id, x=siguiente[0], y=siguiente[1], z=robot.z,
-                      estado=RobotEstado.DESPLAZANDOSE, carga_id=robot.carga_id)
+                      estado=RobotEstado.DESPLAZANDOSE, carga_id=robot.carga_id,
+                      orientacion=robot.orientacion)
         return nuevo, [], [], None, [_ev_movimiento(nuevo)]
 
     def _fase_excavar(self, robot: Robot, tarea: Tarea, acum: "Acumuladores") -> _AvanceResult:
@@ -426,7 +492,8 @@ class Despachador:
         tarea.fase = "mover_a_puerto"
 
         nuevo = Robot(id=robot.id, x=robot.x, y=robot.y, z=robot.z,
-                      estado=RobotEstado.RECUPERANDO, carga_id=caja.id_caja)
+                      estado=RobotEstado.RECUPERANDO, carga_id=caja.id_caja,
+                      orientacion=robot.orientacion)
         g_r = [(caja.x, caja.y, caja.z)]
         ev = {"tipo": "caja_recuperada", "robot_id": robot.id,
               "id_caja": caja.id_caja, "id_sku": caja.id_sku,
@@ -449,21 +516,161 @@ class Despachador:
         tarea.ruta_salida.pop(0)
         acum.total_desplazamientos += 1
         nuevo = Robot(id=robot.id, x=siguiente[0], y=siguiente[1], z=robot.z,
-                      estado=RobotEstado.ENTREGANDO, carga_id=robot.carga_id)
+                      estado=RobotEstado.ENTREGANDO, carga_id=robot.carga_id,
+                      orientacion=robot.orientacion)
         return nuevo, [], [], None, [_ev_movimiento(nuevo)]
 
     def _fase_entregar(self, robot: Robot, tarea: Tarea, acum: "Acumuladores") -> _AvanceResult:
+        est = tarea.estacion
+
+        # --- Estación Cinta/Carrusel (Features 2 y 3) ---
+        if est is not None:
+            # 1) Capacidad por tick: Cinta=1, Carrusel=2. Si está saturada, el
+            #    robot espera este tick sin liberar la celda (cuenta como bloqueo).
+            if self._servidos.get(est.id, 0) >= est.capacidad_tick:
+                acum.ticks_bloqueados += 1
+                nuevo = _cambiar_estado(robot, RobotEstado.ENTREGANDO)
+                return nuevo, [], [], None, [{
+                    "tipo": "estacion_saturada", "robot_id": robot.id,
+                    "estacion": est.id, "capacidad": est.capacidad_tick,
+                }]
+
+            # 2) Orientación: el robot debe encarar la orientación requerida.
+            #    Si no coincide, gira (cuesta COSTO_ROTACION_TICKS) antes de entregar.
+            if robot.orientacion != est.orientacion_requerida:
+                if tarea.ticks_rotando < COSTO_ROTACION_TICKS:
+                    tarea.ticks_rotando += 1
+                    nuevo = _cambiar_estado(robot, RobotEstado.ROTANDO)
+                    return nuevo, [], [], None, [{
+                        "tipo": "rotacion", "robot_id": robot.id,
+                        "de": robot.orientacion.value,
+                        "a": est.orientacion_requerida.value,
+                        "estacion": est.id,
+                    }]
+                # Rotación completada: fijar la nueva orientación y continuar.
+                robot = _cambiar_estado(
+                    robot, RobotEstado.ENTREGANDO,
+                    orientacion=est.orientacion_requerida,
+                )
+                tarea.ticks_rotando = 0
+
+            # 3) Entrega efectiva: consume una unidad de capacidad de la estación.
+            self._servidos[est.id] = self._servidos.get(est.id, 0) + 1
+            self._espera_handoff.pop(robot.id, None)
+
         dt = self._tick_actual - tarea.tick_inicio
         acum.pedidos_completados += 1
         acum.suma_tiempos_ciclo += dt
 
         nuevo = Robot(id=robot.id, x=robot.x, y=robot.y, z=robot.z,
-                      estado=RobotEstado.INACTIVO, carga_id=None)
+                      estado=RobotEstado.INACTIVO, carga_id=None,
+                      orientacion=robot.orientacion)
         ev = {"tipo": "pedido_completado", "robot_id": robot.id,
               "id_pedido": tarea.pedido.id_pedido,
               "id_sku": tarea.pedido.id_sku,
-              "ticks": dt}
+              "ticks": dt,
+              "estacion": est.id if est is not None else None}
         return nuevo, [], [], tarea.pedido, [ev]
+
+    # ------------------------------------------------------------------
+    # Mente Colmena — handoff de orientación (Feature 4)
+    # ------------------------------------------------------------------
+
+    def _handoff_prepass(
+        self,
+        robots_estado: dict[int, Robot],
+        robots_modificados: list[Robot],
+        eventos: list[dict],
+    ) -> None:
+        """Transfiere la carga de robots cargados pero mal orientados (parados en
+        su estación) a un vecino ocioso ya orientado correctamente.
+
+        Criterio TPTS: solo se acepta el handoff si el receptor puede entregar
+        sin coste de rotación y su acercamiento a la estación no supera el coste
+        de que el emisor rote (`<= COSTO_ROTACION_TICKS`). Determinista: itera
+        robots por id ascendente y prioriza por aging (ticks_esperando_handoff).
+        """
+        # Robots candidatos a emitir handoff: cargados, en su estación, mal orientados.
+        emisores = []
+        for robot in robots_estado.values():
+            tarea = self._tareas.get(robot.id)
+            if tarea is None or tarea.estacion is None or robot.carga_id is None:
+                continue
+            est = tarea.estacion
+            if (robot.x, robot.y) != (est.x, est.y):
+                continue
+            if robot.orientacion == est.orientacion_requerida:
+                continue
+            self._espera_handoff[robot.id] = self._espera_handoff.get(robot.id, 0) + 1
+            emisores.append(robot)
+
+        # Mayor aging primero; desempate por id para reproducibilidad.
+        emisores.sort(key=lambda r: (-self._espera_handoff.get(r.id, 0), r.id))
+
+        receptores_usados: set[int] = set()
+        for emisor in emisores:
+            tarea = self._tareas[emisor.id]
+            est = tarea.estacion
+            receptor = self._buscar_candidato_handoff(
+                emisor, est, robots_estado, receptores_usados
+            )
+            if receptor is None:
+                continue
+            # TPTS: el receptor debe estar al menos tan cerca como el coste de rotar.
+            dist = distancia_manhattan((receptor.x, receptor.y), (est.x, est.y))
+            if dist > COSTO_ROTACION_TICKS:
+                continue
+
+            # Transferir tarea + carga al receptor; el emisor queda libre.
+            receptores_usados.add(receptor.id)
+            nueva_ruta = _ruta_xy((receptor.x, receptor.y), (est.x, est.y))
+            tarea.ruta_salida = nueva_ruta
+            tarea.fase = "mover_a_puerto" if nueva_ruta else "entregar"
+            del self._tareas[emisor.id]
+            self._tareas[receptor.id] = tarea
+            self._espera_handoff.pop(emisor.id, None)
+
+            receptor_upd = Robot(
+                id=receptor.id, x=receptor.x, y=receptor.y, z=receptor.z,
+                estado=RobotEstado.ENTREGANDO, carga_id=emisor.carga_id,
+                orientacion=receptor.orientacion,
+            )
+            emisor_upd = Robot(
+                id=emisor.id, x=emisor.x, y=emisor.y, z=emisor.z,
+                estado=RobotEstado.INACTIVO, carga_id=None,
+                orientacion=emisor.orientacion,
+            )
+            robots_estado[receptor.id] = receptor_upd
+            robots_estado[emisor.id] = emisor_upd
+            robots_modificados.append(receptor_upd)
+            robots_modificados.append(emisor_upd)
+            eventos.append({
+                "tipo": "handoff", "de_robot": emisor.id, "a_robot": receptor.id,
+                "id_caja": emisor.carga_id, "estacion": est.id,
+            })
+
+    def _buscar_candidato_handoff(
+        self,
+        emisor: Robot,
+        est: Estacion,
+        robots_estado: dict[int, Robot],
+        excluidos: set[int],
+    ) -> Robot | None:
+        """Vecino (radio RADIO_HANDOFF) ocioso, sin carga y ya orientado a la
+        orientación requerida por la estación. Elige el más cercano a la estación."""
+        candidatos = [
+            r for r in robots_estado.values()
+            if r.id != emisor.id
+            and r.id not in excluidos
+            and r.carga_id is None
+            and r.estado == RobotEstado.INACTIVO
+            and r.id not in self._tareas
+            and r.orientacion == est.orientacion_requerida
+            and distancia_manhattan((r.x, r.y), (emisor.x, emisor.y)) <= RADIO_HANDOFF
+        ]
+        if not candidatos:
+            return None
+        return min(candidatos, key=lambda r: distancia_manhattan((r.x, r.y), (est.x, est.y)))
 
 
 # ------------------------------------------------------------------
@@ -498,10 +705,12 @@ def _cambiar_estado(
     robot: Robot,
     estado: RobotEstado,
     carga_id: str | None = ...,  # type: ignore[assignment]
+    orientacion: Orientacion = ...,  # type: ignore[assignment]
 ) -> Robot:
     cid = robot.carga_id if carga_id is ... else carga_id
+    ori = robot.orientacion if orientacion is ... else orientacion
     return Robot(id=robot.id, x=robot.x, y=robot.y, z=robot.z,
-                 estado=estado, carga_id=cid)
+                 estado=estado, carga_id=cid, orientacion=ori)
 
 
 def _ev_movimiento(robot: Robot) -> dict:
