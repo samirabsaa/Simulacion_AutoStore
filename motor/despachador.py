@@ -301,7 +301,11 @@ class Despachador:
         # Estado desconocido: no hacer nada
         return robot, [], [], None, []
 
-    def _fase_mover_a_objetivo(self, robot, tarea, posiciones_actuales, acum):
+    _AvanceResult = tuple[Robot, list[Caja], list[tuple[int, int, int]], Pedido | None, list[dict]]
+
+    def _fase_mover_a_objetivo(
+        self, robot: Robot, tarea: Tarea, posiciones_actuales: dict[tuple[int, int], int], acum: "Acumuladores",
+    ) -> _AvanceResult:
         if not tarea.ruta_entrada:
             # Ya estamos en la columna objetivo
             tarea.fase = "excavar"
@@ -320,7 +324,7 @@ class Despachador:
                       estado=RobotEstado.DESPLAZANDOSE, carga_id=robot.carga_id)
         return nuevo, [], [], None, [_ev_movimiento(nuevo)]
 
-    def _fase_excavar(self, robot, tarea, acum):
+    def _fase_excavar(self, robot: Robot, tarea: Tarea, acum: "Acumuladores") -> _AvanceResult:
         col = self.grilla.columna(tarea.caja_objetivo.x, tarea.caja_objetivo.y)
         z_obj = tarea.caja_objetivo.z
         encima = [c for c in col if c.z > z_obj]
@@ -399,7 +403,7 @@ class Despachador:
         nuevo = _cambiar_estado(robot, RobotEstado.EXCAVANDO)
         return nuevo, [], [], None, []
 
-    def _fase_recuperar(self, robot, tarea, acum):
+    def _fase_recuperar(self, robot: Robot, tarea: Tarea, acum: "Acumuladores") -> _AvanceResult:
         # Verificar que la caja objetivo sigue en su lugar
         caja = self.grilla.get(
             tarea.caja_objetivo.x, tarea.caja_objetivo.y, tarea.caja_objetivo.z
@@ -429,7 +433,9 @@ class Despachador:
               "x": caja.x, "y": caja.y, "z": caja.z}
         return nuevo, [], g_r, None, [ev]
 
-    def _fase_mover_a_puerto(self, robot, tarea, posiciones_actuales, acum):
+    def _fase_mover_a_puerto(
+        self, robot: Robot, tarea: Tarea, posiciones_actuales: dict[tuple[int, int], int], acum: "Acumuladores",
+    ) -> _AvanceResult:
         if not tarea.ruta_salida:
             tarea.fase = "entregar"
             return self._fase_entregar(robot, tarea, acum)
@@ -446,7 +452,7 @@ class Despachador:
                       estado=RobotEstado.ENTREGANDO, carga_id=robot.carga_id)
         return nuevo, [], [], None, [_ev_movimiento(nuevo)]
 
-    def _fase_entregar(self, robot, tarea, acum):
+    def _fase_entregar(self, robot: Robot, tarea: Tarea, acum: "Acumuladores") -> _AvanceResult:
         dt = self._tick_actual - tarea.tick_inicio
         acum.pedidos_completados += 1
         acum.suma_tiempos_ciclo += dt
