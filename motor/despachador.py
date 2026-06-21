@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from motor.grilla import Grilla
     from motor.kpis import Acumuladores
 
+UMBRAL_RERUTA = 3  # ticks bloqueado consecutivos antes de recalcular ruta (BFS)
 
 # ------------------------------------------------------------------
 # Tarea interna — una por robot activo
@@ -57,6 +58,7 @@ class Tarea:
     # --- Extensiones M3 ---
     estacion: Estacion | None = field(default=None)  # estación de entrega (Feature 2)
     ticks_rotando: int = field(default=0)            # ticks ya girando (Feature 3)
+    ticks_bloqueado_consecutivos: int = field(default=0)  # para reruta por bloqueo persistente
 
 
 # ------------------------------------------------------------------
@@ -163,7 +165,9 @@ class Despachador:
         if self.usa_estaciones:
             self._handoff_prepass(robots_estado, robots_modificados, eventos)
 
-        # Paso 2.5: Ceder paso — INACTIVOS se apartan si bloquean
+        # Paso 2.5: Ceder paso — INACTIVOS se apartan si bloquean.
+        #           Soporta cascada de 2 niveles: si el bloqueador directo
+        #           no tiene celda libre, empuja a un vecino ocioso primero.
         for robot in list(robots_estado.values()):
             tarea = self._tareas.get(robot.id)
             if tarea is None or robot.estado != RobotEstado.BLOQUEADO:
@@ -182,21 +186,13 @@ class Despachador:
                 continue
             if ocupante_id in self._tareas:
                 continue
-            for ax, ay in self.grilla.columnas_adyacentes(ocupante.x, ocupante.y):
-                if (ax, ay) == (robot.x, robot.y):
-                    continue
-                if (ax, ay) not in posiciones_actuales:
-                    posiciones_actuales.pop((ocupante.x, ocupante.y), None)
-                    posiciones_actuales[(ax, ay)] = ocupante_id
-                    nuevo = Robot(
-                        id=ocupante_id, x=ax, y=ay, z=0,
-                        estado=RobotEstado.INACTIVO, carga_id=None,
-                        orientacion=ocupante.orientacion,
-                    )
-                    robots_estado[ocupante_id] = nuevo
-                    robots_modificados.append(nuevo)
-                    eventos.append(_ev_movimiento(nuevo))
-                    break
+            moved = _intentar_ceder_paso(
+                ocupante, robot.id, robots_estado, posiciones_actuales,
+                self._tareas, self.grilla, robots_modificados, eventos,
+                depth=2,
+            )
+            if moved:
+                continue
 
         # Paso 2.6: Resolver interbloqueo — dos robots BLOQUEADOS que
         #           ocupan cada uno la celda destino del otro (swap)
@@ -296,9 +292,18 @@ class Despachador:
     # ------------------------------------------------------------------
 
     def _caja_disponible(self, id_sku: str) -> Caja | None:
-        """Similar a grilla.primera_caja_accesible pero excluye celdas reservadas."""
+        """Similar a grilla.primera_caja_accesible pero excluye celdas reservadas
+        y columnas donde otro robot ya está trabajando (EXCAVANDO/RECUPERANDO)."""
         candidatas = self.grilla.buscar_por_sku(id_sku)
         candidatas = [c for c in candidatas if (c.x, c.y, c.z) not in self._cajas_reservadas]
+        # Excluir columnas donde otro robot ya está excavando/recuperando
+        # (físicamente presente en la columna). Evita bloqueo mutuo.
+        columnas_ocupadas = {
+            (t.caja_objetivo.x, t.caja_objetivo.y)
+            for t in self._tareas.values()
+            if t.fase in ("excavar", "recuperar")
+        }
+        candidatas = [c for c in candidatas if (c.x, c.y) not in columnas_ocupadas]
         if not candidatas:
             return None
 
@@ -378,11 +383,51 @@ class Despachador:
 
         siguiente = tarea.ruta_entrada[0]
         if _celda_ocupada(siguiente, robot.id, posiciones_actuales):
-            # Cesión de paso (T-17)
+            tarea.ticks_bloqueado_consecutivos += 1
+            if tarea.ticks_bloqueado_consecutivos >= UMBRAL_RERUTA:
+                destino = (tarea.caja_objetivo.x, tarea.caja_objetivo.y)
+                evitar_celdas = {
+                    pos for pos, rid in posiciones_actuales.items()
+                    if rid != robot.id
+                }
+                gx = self.grilla.config.grilla.x
+                gy = self.grilla.config.grilla.y
+                nueva_ruta = _ruta_xy_evitando(
+                    (robot.x, robot.y), destino, evitar_celdas, gx, gy
+                )
+                if nueva_ruta is not None and nueva_ruta != tarea.ruta_entrada:
+                    tarea.ruta_entrada = list(nueva_ruta)
+                    tarea.ticks_bloqueado_consecutivos = 0
+                    paso = tarea.ruta_entrada[0] if tarea.ruta_entrada else None
+                    if paso and not _celda_ocupada(paso, robot.id, posiciones_actuales):
+                        tarea.ruta_entrada.pop(0)
+                        acum.total_desplazamientos += 1
+                        nuevo = Robot(id=robot.id, x=paso[0], y=paso[1], z=robot.z,
+                                      estado=RobotEstado.DESPLAZANDOSE, carga_id=robot.carga_id,
+                                      orientacion=robot.orientacion)
+                        evs: list[dict] = [_ev_movimiento(nuevo), {
+                            "tipo": "reruta", "robot_id": robot.id,
+                            "motivo": "bloqueo_persistente", "fase": "mover_a_objetivo",
+                        }]
+                        return nuevo, [], [], None, evs
+                # BFS failed or returned same route — cancel task so robot
+                # can be reassigned on the next tick.
+                self._cajas_reservadas.discard(
+                    (tarea.caja_objetivo.x, tarea.caja_objetivo.y, tarea.caja_objetivo.z)
+                )
+                del self._tareas[robot.id]
+                nuevo = _cambiar_estado(robot, RobotEstado.INACTIVO, carga_id=None)
+                return nuevo, [], [], None, [{
+                    "tipo": "tarea_cancelada", "robot_id": robot.id,
+                    "motivo": "bloqueo_persistente_sin_reruta",
+                    "id_pedido": tarea.pedido.id_pedido,
+                }]
+
             nuevo = _cambiar_estado(robot, RobotEstado.BLOQUEADO)
             acum.ticks_bloqueados += 1
             return nuevo, [], [], None, [_ev_bloqueo(robot)]
 
+        tarea.ticks_bloqueado_consecutivos = 0
         tarea.ruta_entrada.pop(0)
         acum.total_desplazamientos += 1
         nuevo = Robot(id=robot.id, x=siguiente[0], y=siguiente[1], z=robot.z,
@@ -509,10 +554,41 @@ class Despachador:
 
         siguiente = tarea.ruta_salida[0]
         if _celda_ocupada(siguiente, robot.id, posiciones_actuales):
+            tarea.ticks_bloqueado_consecutivos += 1
+            if tarea.ticks_bloqueado_consecutivos >= UMBRAL_RERUTA:
+                evitar_celdas = {
+                    pos for pos, rid in posiciones_actuales.items()
+                    if rid != robot.id
+                }
+                gx = self.grilla.config.grilla.x
+                gy = self.grilla.config.grilla.y
+                nueva_ruta = _ruta_xy_evitando(
+                    (robot.x, robot.y), tarea.puerto, evitar_celdas, gx, gy
+                )
+                if nueva_ruta is not None and nueva_ruta != tarea.ruta_salida:
+                    tarea.ruta_salida = list(nueva_ruta)
+                    tarea.ticks_bloqueado_consecutivos = 0
+                    paso = tarea.ruta_salida[0] if tarea.ruta_salida else None
+                    if paso and not _celda_ocupada(paso, robot.id, posiciones_actuales):
+                        tarea.ruta_salida.pop(0)
+                        acum.total_desplazamientos += 1
+                        nuevo = Robot(id=robot.id, x=paso[0], y=paso[1], z=robot.z,
+                                      estado=RobotEstado.ENTREGANDO, carga_id=robot.carga_id,
+                                      orientacion=robot.orientacion)
+                        evs: list[dict] = [_ev_movimiento(nuevo), {
+                            "tipo": "reruta", "robot_id": robot.id,
+                            "motivo": "bloqueo_persistente", "fase": "mover_a_puerto",
+                        }]
+                        return nuevo, [], [], None, evs
+                # BFS failed — robot carries a caja, can't cancel (would lose it).
+                # Reset counter and keep waiting; the obstacle will eventually move.
+                tarea.ticks_bloqueado_consecutivos = 0
+
             nuevo = _cambiar_estado(robot, RobotEstado.BLOQUEADO, carga_id=robot.carga_id)
             acum.ticks_bloqueados += 1
             return nuevo, [], [], None, [_ev_bloqueo(robot)]
 
+        tarea.ticks_bloqueado_consecutivos = 0
         tarea.ruta_salida.pop(0)
         acum.total_desplazamientos += 1
         nuevo = Robot(id=robot.id, x=siguiente[0], y=siguiente[1], z=robot.z,
@@ -689,6 +765,94 @@ def _ruta_xy(origen: tuple[int, int], destino: tuple[int, int]) -> list[tuple[in
         y += 1 if dy > y else -1
         pasos.append((x, y))
     return pasos
+
+
+def _ruta_xy_evitando(
+    origen: tuple[int, int],
+    destino: tuple[int, int],
+    evitar: set[tuple[int, int]],
+    gx: int,
+    gy: int,
+) -> list[tuple[int, int]] | None:
+    """BFS corta que busca ruta XY rodeando las celdas en `evitar`.
+
+    Retorna la lista de pasos (sin incluir el origen) o None si no hay ruta.
+    El límite de profundidad es 2× la distancia Manhattan para no explorar toda
+    la grilla en el caso degenerado."""
+    from collections import deque
+
+    if origen == destino:
+        return []
+    max_depth = 2 * (abs(destino[0] - origen[0]) + abs(destino[1] - origen[1]))
+    queue: deque[tuple[tuple[int, int], list[tuple[int, int]]]] = deque()
+    queue.append((origen, []))
+    visitados: set[tuple[int, int]] = {origen}
+
+    while queue:
+        (cx, cy), camino = queue.popleft()
+        if len(camino) >= max_depth:
+            continue
+        for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
+            if not (0 <= nx < gx and 0 <= ny < gy):
+                continue
+            if (nx, ny) in visitados:
+                continue
+            nuevo_camino = camino + [(nx, ny)]
+            if (nx, ny) == destino:
+                return nuevo_camino
+            if (nx, ny) in evitar:
+                continue
+            visitados.add((nx, ny))
+            queue.append(((nx, ny), nuevo_camino))
+    return None
+
+
+def _intentar_ceder_paso(
+    ocupante: Robot,
+    solicitante_id: int,
+    robots_estado: dict[int, Robot],
+    posiciones_actuales: dict[tuple[int, int], int],
+    tareas: dict[int, Tarea],
+    grilla: "Grilla",
+    robots_modificados: list[Robot],
+    eventos: list[dict],
+    depth: int = 1,
+) -> bool:
+    """Move an idle robot out of the way. If no free adjacent cell and depth > 1,
+    recursively push an idle neighbor first (cascading yield)."""
+    excluir = {(ocupante.x, ocupante.y)}
+    for ax, ay in grilla.columnas_adyacentes(ocupante.x, ocupante.y):
+        if (ax, ay) not in posiciones_actuales:
+            posiciones_actuales.pop((ocupante.x, ocupante.y), None)
+            posiciones_actuales[(ax, ay)] = ocupante.id
+            nuevo = Robot(id=ocupante.id, x=ax, y=ay, z=0,
+                          estado=RobotEstado.INACTIVO, carga_id=None,
+                          orientacion=ocupante.orientacion)
+            robots_estado[ocupante.id] = nuevo
+            robots_modificados.append(nuevo)
+            eventos.append(_ev_movimiento(nuevo))
+            return True
+    if depth <= 1:
+        return False
+    for ax, ay in grilla.columnas_adyacentes(ocupante.x, ocupante.y):
+        vecino_id = posiciones_actuales.get((ax, ay))
+        if vecino_id is None or vecino_id == solicitante_id or vecino_id == ocupante.id:
+            continue
+        vecino = robots_estado.get(vecino_id)
+        if vecino is None or vecino.estado != RobotEstado.INACTIVO or vecino_id in tareas:
+            continue
+        if _intentar_ceder_paso(vecino, ocupante.id, robots_estado, posiciones_actuales,
+                                tareas, grilla, robots_modificados, eventos, depth=depth - 1):
+            posiciones_actuales.pop((ocupante.x, ocupante.y), None)
+            posiciones_actuales[(ax, ay)] = ocupante.id
+            nuevo = Robot(id=ocupante.id, x=ax, y=ay, z=0,
+                          estado=RobotEstado.INACTIVO, carga_id=None,
+                          orientacion=ocupante.orientacion)
+            robots_estado[ocupante.id] = nuevo
+            robots_modificados.append(nuevo)
+            eventos.append(_ev_movimiento(nuevo))
+            return True
+    return False
 
 
 def _celda_ocupada(
