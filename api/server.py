@@ -21,6 +21,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from bus_persistencia.bus.state_bus import StateBus
@@ -35,6 +36,7 @@ from api.serializers import MODO_FROM_M1, POLITICA_FROM_M1, snapshot_to_payload
 bus = StateBus()
 _websockets: set[WebSocket] = set()
 _main_loop: asyncio.AbstractEventLoop | None = None
+OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output"
 
 
 def _broadcast() -> None:
@@ -205,3 +207,28 @@ async def upload_reposicion(file: UploadFile) -> dict[str, Any]:
     if result.is_valid:
         loop.set_cola_reposicion(result.data)
     return _validation_to_dto(result)
+
+
+@app.get("/report/comparativo")
+def get_report_comparativo():
+    path = OUTPUT_DIR / "reporte_comp.csv"
+    if not path.exists():
+        raise HTTPException(404, "reporte_comp.csv no existe aún")
+    return FileResponse(
+        path,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=reporte_comp.csv"},
+    )
+
+
+@app.get("/report/sesion")
+def get_report_sesion():
+    csvs = sorted(OUTPUT_DIR.glob("sesion_*.csv"), reverse=True)
+    if not csvs:
+        raise HTTPException(404, "No hay sesión guardada aún")
+    path = csvs[0]
+    return FileResponse(
+        path,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={path.name}"},
+    )

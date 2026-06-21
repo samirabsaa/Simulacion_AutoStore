@@ -1,0 +1,38 @@
+<div class="robot-panel">
+  <div class="robot-panel__header">
+    <h3 class="robot-panel__title">Estado de la flota</h3>
+    <span class="robot-panel__meta mono">tick {{ tick }} · {{ robots.length }} robots</span>
+  </div>
+
+  @if (robots.length === 0) {
+    <p class="robot-panel__empty">Sin datos de robots — configura e inicia la simulación.</p>
+  } @else {
+    <div class="robot-panel__grid">
+      @for (r of robots; track r.id) {
+        <div class="robot-panel__card" [class]="'robot-panel__card--' + cssMod(r.estado)">
+          <div class="robot-panel__card-top">
+            <span class="robot-panel__id mono">R{{ r.id }}</span>
+            <span class="robot-panel__badge" [class]="'robot-panel__badge--' + cssMod(r.estado)">
+              {{ label(r.estado) }}
+            </span>
+          </div>
+          <div class="robot-panel__pos mono">({{ r.x }}, {{ r.y }})</div>
+          @if (r.carga_id) {
+            <div class="robot-panel__cargo mono">{{ r.carga_id }}</div>
+          } @else {
+            <div class="robot-panel__cargo robot-panel__cargo--empty">Sin carga</div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <div class="robot-panel__legend">
+    @for (s of stateLegend; track s.estado) {
+      <div class="robot-panel__legend-item">
+        <span class="robot-panel__legend-dot" [class]="'robot-panel__legend-dot--' + cssMod(s.estado)"></span>
+        <span>{{ s.label }}</span>
+      </div>
+    }
+  </div>
+</div>

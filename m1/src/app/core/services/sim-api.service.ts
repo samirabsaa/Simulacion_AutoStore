@@ -39,4 +39,12 @@ export class SimApiService {
     form.append('file', file);
     return this.http.post<ValidationResultDTO>(`${environment.apiUrl}/api/upload/${tipo}`, form);
   }
+
+  downloadComparativo(): void {
+    window.open(`${environment.apiUrl}/report/comparativo`, '_blank');
+  }
+
+  exportSesion(): void {
+    window.open(`${environment.apiUrl}/report/sesion`, '_blank');
+  }
 }

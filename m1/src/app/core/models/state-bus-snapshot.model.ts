@@ -10,6 +10,15 @@ export interface WsRobotState {
   carga_id: string | null;
 }
 
+export interface WsGrillaCell {
+  id_caja:  string;
+  id_sku:   string;
+  cantidad: number;
+  x:        number;
+  y:        number;
+  z:        number;
+}
+
 export interface WsKpis {
   // Claves en MAYÚSCULA (usadas por la UI: KpisComputed en bus-client.service.ts)
   TSP: number; TPCP: number; MTRP: number; IOG: number; TR: number; TI: number; TBR: number;
@@ -29,7 +38,7 @@ export interface WsTickPayload {
   velocidad: number;
   grid:      { x: number; y: number; z: number } | null;
   robots:    WsRobotState[];
-  grilla:    unknown[];
+  grilla:    WsGrillaCell[];
   pedidos:   { cola: unknown[]; completados: unknown[] };
   kpis:      WsKpis;
 }

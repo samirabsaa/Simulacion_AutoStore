@@ -1,11 +1,15 @@
-import { Component, Input, OnChanges, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, OnChanges, OnInit } from '@angular/core';
+import { WsGrillaCell, WsRobotState } from '../../../core/models/state-bus-snapshot.model';
+import { robotStateShort } from '../../../core/utils/robot-state.util';
 
 interface HeatCell {
-  key:      string;
-  occ:      number;
-  hasRobot: boolean;
-  robotId:  number;
-  color:    string;
+  key:         string;
+  occ:         number;
+  hasRobot:    boolean;
+  robotId:     number;
+  robotEstado: string;
+  robotIcon:   string;
+  color:       string;
 }
 
 function occColor(o: number): string {
@@ -16,23 +20,25 @@ function occColor(o: number): string {
   return 'var(--occ-5)';
 }
 
+function estadoIcon(estado: string): string {
+  return robotStateShort(estado);
+}
+
 @Component({
   selector: 'app-robot-grid',
   templateUrl: './robot-grid.component.html',
   styleUrls: ['./robot-grid.component.scss'],
   imports: [],
 })
-export class RobotGridComponent implements OnInit, OnChanges, OnDestroy {
-  @Input() gridX    = 12;
-  @Input() gridY    = 10;
-  @Input() numRobots = 8;
-  @Input() iog       = 78;
-  @Input() tick      = 0;
+export class RobotGridComponent implements OnInit, OnChanges {
+  @Input() gridX   = 12;
+  @Input() gridY   = 10;
+  @Input() gridZ   = 5;
+  @Input() grilla: WsGrillaCell[] = [];
+  @Input() robots: WsRobotState[] = [];
+  @Input() tick    = 0;
 
   cells: HeatCell[] = [];
-  // Contador local para animar cuando el backend no envía ticks.
-  private localTick = 0;
-  private animId?: ReturnType<typeof setInterval>;
 
   readonly ramp = [
     { label: '0–20%',   cssVar: '--occ-1' },
@@ -46,37 +52,52 @@ export class RobotGridComponent implements OnInit, OnChanges, OnDestroy {
   get rows(): number { return Math.min(this.gridY, 12); }
   get colTemplate(): string { return `repeat(${this.cols}, 1fr)`; }
 
-  ngOnInit(): void {
-    this.localTick = this.tick;
-    // Anima localmente a 1 Hz. ngOnChanges sincroniza localTick cuando llega tick real.
-    this.animId = setInterval(() => {
-      this.localTick++;
-      this.rebuildCells();
-    }, 1000);
-  }
+  readonly stateLegend = [
+    { mod: 'idle',       label: 'Inactivo' },
+    { mod: 'moving',     label: 'Moviendo' },
+    { mod: 'picking',    label: 'Excavando' },
+    { mod: 'blocked',    label: 'Bloqueado' },
+    { mod: 'depositing', label: 'Entregando' },
+  ];
 
-  ngOnChanges(): void {
-    // Cuando el WS envía un tick real, sincronizamos y reconstruimos de inmediato.
-    this.localTick = this.tick;
+  ngOnInit(): void {
     this.rebuildCells();
   }
 
-  ngOnDestroy(): void {
-    clearInterval(this.animId);
+  ngOnChanges(): void {
+    this.rebuildCells();
   }
 
   private rebuildCells(): void {
     const gx = this.cols;
     const gy = this.rows;
-    const t  = this.localTick;
+
+    const boxCount = new Map<string, number>();
+    for (const c of this.grilla) {
+      const key = `${c.x}-${c.y}`;
+      boxCount.set(key, (boxCount.get(key) ?? 0) + 1);
+    }
+
+    const robotMap = new Map<string, { id: number; estado: string }>();
+    for (const r of this.robots) {
+      robotMap.set(`${r.x}-${r.y}`, { id: r.id, estado: r.estado });
+    }
+
     const result: HeatCell[] = [];
     for (let y = 0; y < gy; y++) {
       for (let x = 0; x < gx; x++) {
-        const base = ((x * 7 + y * 13 + (x ^ y) * 5) % 100);
-        const occ  = Math.max(0, Math.min(100, base * 0.45 + this.iog * 0.55));
-        const hasRobot = (x * 3 + y * 5 + t) % 19 === 0 && (x + y) % 2 === 0;
-        const robotId  = ((x + y) % this.numRobots) + 1;
-        result.push({ key: `${x}-${y}`, occ, hasRobot, robotId, color: occColor(occ) });
+        const key = `${x}-${y}`;
+        const occ = ((boxCount.get(key) ?? 0) / this.gridZ) * 100;
+        const rob = robotMap.get(key);
+        result.push({
+          key,
+          occ: Math.round(occ),
+          hasRobot: !!rob,
+          robotId: rob?.id ?? 0,
+          robotEstado: rob?.estado ?? '',
+          robotIcon: estadoIcon(rob?.estado ?? ''),
+          color: occColor(occ),
+        });
       }
     }
     this.cells = result;

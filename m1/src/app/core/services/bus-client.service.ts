@@ -2,7 +2,7 @@ import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { SimMode, PickingPolicy, SimStatus } from '../enums/sim.enums';
 import { GridConfig, DEFAULT_GRID_CONFIG } from '../models/grid-config.model';
-import { WsTickPayload, WsSystemErrorPayload } from '../models/state-bus-snapshot.model';
+import { WsTickPayload, WsSystemErrorPayload, WsRobotState, WsGrillaCell } from '../models/state-bus-snapshot.model';
 import { SimApiService } from './sim-api.service';
 import { environment } from '../../../environments/environment';
 
@@ -37,6 +37,8 @@ export interface BusState {
   omniverse: 'conectado' | 'headless';
   kpis: KpisComputed;
   status: SimStatus;
+  robots: WsRobotState[];
+  grilla: WsGrillaCell[];
 }
 
 export const FORUS_DEFAULTS = {
@@ -63,6 +65,7 @@ const INITIAL_STATE: BusState = {
   archivoOla: 'no_cargado', archivoReposicion: 'no_cargado',
   falloSistema: null, omniverse: 'headless',
   kpis: { ...EMPTY_KPIS }, status: SimStatus.IDLE,
+  robots: [], grilla: [],
 };
 
 @Injectable({ providedIn: 'root' })
@@ -138,6 +141,12 @@ export class BusClientService implements OnDestroy {
       // El bridge devuelve `robots: []` antes de que M1 envíe /config (aún no
       // hay simulación configurada) — no pisar el valor local con 0 en ese caso.
       numRobots: Array.isArray(msg.robots) && msg.robots.length > 0 ? msg.robots.length : s.numRobots,
+      robots: msg.grid != null && Array.isArray(msg.robots)
+        ? msg.robots
+        : (Array.isArray(msg.robots) && msg.robots.length > 0 ? msg.robots : s.robots),
+      grilla: msg.grid != null && Array.isArray(msg.grilla)
+        ? msg.grilla
+        : (Array.isArray(msg.grilla) && msg.grilla.length > 0 ? msg.grilla : s.grilla),
       kpis,
     });
   }
@@ -205,7 +214,7 @@ export class BusClientService implements OnDestroy {
   /** Envía POST /control/reset. El estado real llega por WS. */
   reset(): void {
     // Actualización optimista para dar feedback inmediato al usuario
-    this.patchLocal({ tick: 0, running: false, status: SimStatus.IDLE, kpis: { ...EMPTY_KPIS } });
+    this.patchLocal({ tick: 0, running: false, status: SimStatus.IDLE, kpis: { ...EMPTY_KPIS }, robots: [], grilla: [] });
     this.simApi.reset().subscribe({ error: () => {} });
   }
 

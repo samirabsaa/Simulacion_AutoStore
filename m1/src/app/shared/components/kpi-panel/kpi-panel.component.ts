@@ -2,15 +2,16 @@ import { Component, Input } from '@angular/core';
 import { SimMode } from '../../../core/enums/sim.enums';
 
 export interface KpiDef {
-  id:        'TSP' | 'TPCP' | 'MTRP' | 'IOG' | 'TR' | 'TI' | 'TBR';
-  code:      string;
-  name:      string;
-  unit:      string;
-  meta:      string;
-  better:    'higher' | 'lower' | 'range';
-  threshold?: number;
-  range?:    [number, number];
-  modes:     SimMode[];
+  id:          'TSP' | 'TPCP' | 'MTRP' | 'IOG' | 'TR' | 'TI' | 'TBR';
+  code:        string;
+  name:        string;
+  unit:        string;
+  meta:        string;
+  better:      'higher' | 'lower' | 'range';
+  threshold?:   number;
+  range?:      [number, number];
+  modes:       SimMode[];
+  description: string;
 }
 
 export type KpiStatus = 'ok' | 'warn' | 'bad' | 'info';

@@ -1,0 +1,120 @@
+.robot-panel {
+  &__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  &__meta {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  &__empty {
+    margin: 0 0 16px;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  &__card {
+    padding: 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-card);
+    background: var(--surface-app);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  &__card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  &__id {
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  &__badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 999px;
+    color: #fff;
+    white-space: nowrap;
+
+    &--idle       { background: #6b7280; }
+    &--moving     { background: #3b82f6; }
+    &--picking    { background: #f59e0b; }
+    &--blocked    { background: #ef4444; }
+    &--depositing { background: #22c55e; }
+    &--unknown    { background: #9ca3af; }
+  }
+
+  &__pos {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  &__cargo {
+    font-size: 11px;
+    color: var(--text-primary);
+
+    &--empty {
+      color: var(--text-muted);
+      font-style: italic;
+      font-family: var(--font-sans);
+    }
+  }
+
+  &__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-card);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  &__legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex: none;
+
+    &--idle       { background: #6b7280; }
+    &--moving     { background: #3b82f6; }
+    &--picking    { background: #f59e0b; }
+    &--blocked    { background: #ef4444; }
+    &--depositing { background: #22c55e; }
+    &--unknown    { background: #9ca3af; }
+  }
+}

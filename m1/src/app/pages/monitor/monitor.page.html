@@ -1,0 +1,50 @@
+<app-bus-strip></app-bus-strip>
+
+<div class="monitor-page">
+
+  <!-- Tab selector -->
+  <div class="monitor__tabs">
+    <button class="monitor__tab"
+            [class.monitor__tab--active]="vista === '2d'"
+            (click)="setVista('2d')">2D · Grilla</button>
+    <button class="monitor__tab"
+            [class.monitor__tab--active]="vista === '3d'"
+            (click)="setVista('3d')">3D · Omniverse</button>
+  </div>
+
+  @if (vista === '2d') {
+
+    <!-- Controls + Grid -->
+    <app-control-bar
+      [running]="bus?.running ?? false"
+      [speed]="(bus?.velocidad ?? 1)"
+      (play)="onPlay()"
+      (pause)="onPause()"
+      (reset)="onReset()"
+      (speedChange)="onSpeedChange($event)"
+    ></app-control-bar>
+
+    @if (bus) {
+      <div class="monitor__grid">
+        <app-robot-grid
+          [gridX]="bus.grid.x"
+          [gridY]="bus.grid.y"
+          [gridZ]="bus.grid.z"
+          [grilla]="bus.grilla"
+          [robots]="bus.robots"
+        ></app-robot-grid>
+      </div>
+    }
+
+  } @else {
+
+    <!-- 3D placeholder -->
+    <div class="monitor__placeholder">
+      <div class="monitor__placeholder-icon">▣</div>
+      <h2>Módulo M3 — Pendiente</h2>
+      <p>La visualización 3D en Omniverse se integrará en una versión futura.</p>
+    </div>
+
+  }
+
+</div>

@@ -8,7 +8,7 @@
       <p class="cfg__sub">Define los parámetros iniciales. Se publican al Bus y alimentan el Motor y Omniverse.</p>
     </div>
     <div class="cfg__actions">
-      <button class="cfg__btn-secondary" (click)="null" title="Guardar config.json">
+      <button class="cfg__btn-secondary" (click)="guardarConfig()" title="Guardar config.json">
         💾 Guardar config.json
       </button>
       <button class="cfg__btn-primary"
@@ -76,55 +76,25 @@
             <input type="range" min="20" max="95" [value]="bus.ocupacionInicial" (input)="setOcc($event)" class="cfg__range">
             <div class="cfg__range-limits"><span>20%</span><span>95%</span></div>
           </div>
-          <div class="cfg__slider-row">
-            <label class="cfg__slider-label">Pedidos demandados <span class="mono cfg__slider-val">{{ bus.pedidosDemandados }}</span></label>
-            <input type="range" min="20" max="400" [value]="bus.pedidosDemandados" (input)="setPed($event)" class="cfg__range">
-            <div class="cfg__range-limits"><span>20</span><span>400</span></div>
-          </div>
-          <p class="cfg__hint-text">Valores por defecto Forus S.A.: grilla 12×10×5, 8 robots, 78% ocupación, ola de 120 pedidos.</p>
+          <p class="cfg__hint-text">Valores por defecto Forus S.A.: grilla 12×10×5, 8 robots, 78% ocupación.</p>
         </div>
       </div>
 
-      <!-- Modo, Política, Velocidad -->
+      <!-- Modo turno (needed for CSV mode selection) -->
       <div class="as-card cfg__card">
-        <span class="cfg__card-title">Modo, Política y Velocidad</span>
-        <div class="cfg__field-group">
-          <div class="cfg__field">
-            <label class="cfg__field-label">Modo de turno</label>
-            <div class="seg-ctrl">
-              <button class="seg-ctrl__btn"
-                      [class.seg-ctrl__btn--active]="bus.mode === SimMode.DIURNO"
-                      [class.seg-ctrl__btn--day]="bus.mode === SimMode.DIURNO"
-                      (click)="setMode(SimMode.DIURNO)">☀ Diurno · Picking</button>
-              <button class="seg-ctrl__btn"
-                      [class.seg-ctrl__btn--active]="bus.mode !== SimMode.DIURNO"
-                      [class.seg-ctrl__btn--night]="bus.mode !== SimMode.DIURNO"
-                      (click)="setMode(SimMode.NOCTURNO)">🌙 Nocturno · Reposición</button>
-            </div>
-            <p class="cfg__field-hint">Diurno carga ola.csv · Nocturno carga reposicion.csv.</p>
+        <span class="cfg__card-title">Modo de Turno</span>
+        <div class="cfg__field">
+          <div class="seg-ctrl">
+            <button class="seg-ctrl__btn"
+                    [class.seg-ctrl__btn--active]="bus.mode === SimMode.DIURNO"
+                    [class.seg-ctrl__btn--day]="bus.mode === SimMode.DIURNO"
+                    (click)="setMode(SimMode.DIURNO)">☀ Diurno · Picking</button>
+            <button class="seg-ctrl__btn"
+                    [class.seg-ctrl__btn--active]="bus.mode !== SimMode.DIURNO"
+                    [class.seg-ctrl__btn--night]="bus.mode !== SimMode.DIURNO"
+                    (click)="setMode(SimMode.NOCTURNO)">🌙 Nocturno · Reposición</button>
           </div>
-          <div class="cfg__field">
-            <label class="cfg__field-label">Política de picking</label>
-            <div class="seg-ctrl">
-              <button class="seg-ctrl__btn"
-                      [class.seg-ctrl__btn--active]="bus.policy === PickingPolicy.FIFO"
-                      (click)="setPolicy(PickingPolicy.FIFO)">FIFO</button>
-              <button class="seg-ctrl__btn"
-                      [class.seg-ctrl__btn--active]="bus.policy !== PickingPolicy.FIFO"
-                      (click)="setPolicy(PickingPolicy.PRIORITY_POSITION)">Prioridad Posición</button>
-            </div>
-            <p class="cfg__field-hint">Cambio efectivo en el siguiente tick, sin reiniciar.</p>
-          </div>
-          <div class="cfg__field">
-            <label class="cfg__field-label">Velocidad de simulación</label>
-            <div class="seg-ctrl">
-              @for (v of speedOptions; track v) {
-                <button class="seg-ctrl__btn"
-                        [class.seg-ctrl__btn--active]="bus.velocidad === v"
-                        (click)="setVelocidad(v)">{{ v }}×</button>
-              }
-            </div>
-          </div>
+          <p class="cfg__field-hint">Diurno carga ola.csv · Nocturno carga reposicion.csv.</p>
         </div>
       </div>
 
@@ -157,87 +127,22 @@
         </div>
       </div>
 
-      <!-- Validación de parámetros (T-24) -->
-      <div class="as-card cfg__card">
-        <span class="cfg__card-title">Validación de Parámetros (T-24)</span>
-        <div class="cfg__validations">
-          @for (v of validaciones; track v.msg) {
-            <div class="cfg__validation" [class]="'cfg__validation--' + v.sev">
-              <span class="cfg__validation-icon">
-                @if (v.sev === 'ok')    { ✓ }
-                @if (v.sev === 'warn')  { ⚠ }
-                @if (v.sev === 'error') { ✗ }
-              </span>
-              <span class="cfg__validation-msg">{{ v.msg }}</span>
-            </div>
-          }
-          <div class="cfg__metrics">
-            <div class="cfg__metric">
-              <span class="cfg__metric-label">VRAM estimada (M3)</span>
-              <span class="cfg__metric-val mono" [class.cfg__metric-val--warn]="vramPct >= 80">{{ vramPct.toFixed(0) }}%</span>
-            </div>
-            <div class="cfg__metric">
-              <span class="cfg__metric-label">Capacidad</span>
-              <span class="cfg__metric-val mono">{{ capacidad.toLocaleString('es-CL') }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Estado del sistema (T-30) -->
+      <!-- VRAM estimator -->
       <div class="as-card cfg__card">
         <div class="cfg__card-head">
-          <span class="cfg__card-title">Estado del Sistema</span>
-          <span class="cfg__card-subtitle">Usuario vs. sistema</span>
+          <span class="cfg__card-title">Estimación VRAM (M3)</span>
+          <span class="cfg__card-subtitle">Referencia para Omniverse</span>
         </div>
-
-        @if (!bus.falloSistema && csvListo) {
-          <div class="cfg__status-ok">
-            <span>✓</span>
-            <p>Sin incidencias. Datos válidos y Motor/Omniverse operativos.</p>
+        <div class="cfg__metrics">
+          <div class="cfg__metric">
+            <span class="cfg__metric-label">VRAM estimada</span>
+            <span class="cfg__metric-val mono" [class.cfg__metric-val--warn]="vramPct >= 80">{{ vramPct.toFixed(0) }}%</span>
           </div>
-        }
-
-        @if (bus.falloSistema === 'motor') {
-          <div class="cfg__error-card cfg__error-card--sistema">
-            <div class="cfg__error-bar"></div>
-            <div class="cfg__error-body">
-              <div class="cfg__error-tag">⚡ ERROR DEL SISTEMA</div>
-              <p class="cfg__error-title">El Motor de Simulación no responde</p>
-              <p class="cfg__error-detail"><b>Causa:</b> M2 no publicó un tick en los últimos 5 s.</p>
-              <p class="cfg__error-detail"><b>Acción:</b> Reintenta la conexión. El progreso no se pierde.</p>
-              <button class="cfg__btn-secondary cfg__btn-sm" (click)="clearFallo()">↺ Reintentar conexión</button>
-            </div>
+          <div class="cfg__metric">
+            <span class="cfg__metric-label">Capacidad</span>
+            <span class="cfg__metric-val mono">{{ capacidad.toLocaleString('es-CL') }}</span>
           </div>
-        }
-
-        @if (bus.falloSistema === 'omniverse') {
-          <div class="cfg__error-card cfg__error-card--sistema">
-            <div class="cfg__error-bar"></div>
-            <div class="cfg__error-body">
-              <div class="cfg__error-tag">⚡ ERROR DEL SISTEMA</div>
-              <p class="cfg__error-title">Se perdió la conexión con NVIDIA Omniverse</p>
-              <p class="cfg__error-detail"><b>Causa:</b> El contexto GPU de M3 dejó de responder.</p>
-              <p class="cfg__error-detail"><b>Acción:</b> Continúa en modo headless; el Motor sigue calculando.</p>
-              <button class="cfg__btn-secondary cfg__btn-sm" (click)="goHeadless()">📴 Continuar en headless</button>
-            </div>
-          </div>
-        }
-
-        <div class="cfg__fallo-sim">
-          <span class="cfg__fallo-label">Simular fallo de sistema:</span>
-          <button class="cfg__fallo-btn"
-                  [class.cfg__fallo-btn--active]="bus.falloSistema === 'motor'"
-                  (click)="setFallo(bus.falloSistema === 'motor' ? null : 'motor')">
-            Motor no responde
-          </button>
-          <button class="cfg__fallo-btn"
-                  [class.cfg__fallo-btn--active]="bus.falloSistema === 'omniverse'"
-                  (click)="setFallo(bus.falloSistema === 'omniverse' ? null : 'omniverse')">
-            Omniverse falla
-          </button>
         </div>
-        <p class="cfg__hint-text" style="margin-top:8px">👁 El sistema nunca muestra stack traces al usuario final.</p>
       </div>
 
     </div><!-- /RIGHT -->

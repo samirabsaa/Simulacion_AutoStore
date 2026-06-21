@@ -13,7 +13,8 @@
           <div style="font-weight:600;font-size:15px">Reporte Comparativo</div>
           <div style="font-size:13px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">reporte_comp.csv</div>
         </div>
-        <button style="padding:8px 18px;background:var(--brand);color:#fff;border:none;border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer">
+        <button style="padding:8px 18px;background:var(--brand);color:#fff;border:none;border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer"
+                (click)="downloadComparativo()">
           ⬇ Descargar
         </button>
       </div>
@@ -27,7 +28,8 @@
             </div>
           }
         </div>
-        <button style="padding:8px 18px;background:var(--surface-card);color:var(--text-primary);border:1px solid var(--border-card);border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer">
+        <button style="padding:8px 18px;background:var(--surface-card);color:var(--text-primary);border:1px solid var(--border-card);border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer"
+                (click)="exportSesion()">
           ⬇ Exportar sesión
         </button>
       </div>

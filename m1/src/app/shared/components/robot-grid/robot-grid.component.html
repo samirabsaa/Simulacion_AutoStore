@@ -1,19 +1,39 @@
 <div class="occ-heatmap">
   <div class="occ-heatmap__grid" [style.grid-template-columns]="colTemplate">
-    @for (cell of cells; track cell.key) {
+    @for (cell of cells; track cell.key + '-' + cell.robotEstado + '-' + cell.robotId) {
       <div class="occ-heatmap__cell" [style.background]="cell.color">
         @if (cell.hasRobot) {
-          <div class="occ-heatmap__robot">{{ cell.robotId }}</div>
+          <div class="occ-heatmap__robot"
+               [class.occ-heatmap__robot--idle]="cell.robotEstado === 'IDLE'"
+               [class.occ-heatmap__robot--moving]="cell.robotEstado === 'MOVING'"
+               [class.occ-heatmap__robot--picking]="cell.robotEstado === 'PICKING'"
+               [class.occ-heatmap__robot--blocked]="cell.robotEstado === 'BLOCKED'"
+               [class.occ-heatmap__robot--depositing]="cell.robotEstado === 'DEPOSITING'"
+               [title]="'R' + cell.robotId + ' · ' + cell.robotEstado">
+            <span class="occ-heatmap__robot-id">R{{ cell.robotId }}</span>
+            <span class="occ-heatmap__robot-state">{{ cell.robotIcon }}</span>
+          </div>
         }
       </div>
     }
   </div>
 
   <div class="occ-heatmap__legend">
+    <span class="occ-heatmap__legend-heading">Ocupación</span>
     @for (r of ramp; track r.cssVar) {
       <div class="occ-heatmap__legend-item">
         <span class="occ-heatmap__legend-swatch" [style.background]="'var(' + r.cssVar + ')'"></span>
         <span>{{ r.label }}</span>
+      </div>
+    }
+  </div>
+
+  <div class="occ-heatmap__legend occ-heatmap__legend--robots">
+    <span class="occ-heatmap__legend-heading">Robots</span>
+    @for (s of stateLegend; track s.mod) {
+      <div class="occ-heatmap__legend-item">
+        <span class="occ-heatmap__legend-dot occ-heatmap__legend-dot--{{ s.mod }}"></span>
+        <span>{{ s.label }}</span>
       </div>
     }
   </div>

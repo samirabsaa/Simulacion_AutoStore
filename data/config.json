@@ -1,5 +1,5 @@
 {
-  "grilla": { "x": 10, "y": 10, "z": 5 },
-  "robots": 10 ,
+  "grilla": { "x": 15, "y": 10, "z": 5 },
+  "robots": 10,
   "ocupacion_inicial": 70
 }

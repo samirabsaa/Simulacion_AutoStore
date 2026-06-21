@@ -34,34 +34,6 @@
 
     <!-- ═══════════════ MAIN ═══════════════ -->
     <div class="main">
-
-      <!-- Topbar -->
-      <header class="topbar">
-        <div class="topbar__left">
-          <span class="topbar__shift"
-                [class.topbar__shift--day]="isDiurno"
-                [class.topbar__shift--night]="!isDiurno">
-            {{ isDiurno ? '☀' : '🌙' }}
-            {{ isDiurno ? 'Turno Diurno · Picking' : 'Turno Nocturno · Reposición' }}
-          </span>
-        </div>
-
-        <div class="topbar__right">
-          @if (bus) {
-            <div class="topbar__tick">
-              <span class="topbar__tick-label">TICK</span>
-              <span class="topbar__tick-value">{{ tickStr }}</span>
-              <span class="topbar__tick-speed">{{ bus.velocidad }}×</span>
-              <span class="topbar__tick-dot"
-                    [class.topbar__tick-dot--running]="bus.running"></span>
-            </div>
-          }
-          <span class="topbar__clock">{{ displayTime }}</span>
-          <div class="topbar__avatar">OP</div>
-        </div>
-      </header>
-
-      <!-- Content -->
       <main class="content">
         <router-outlet></router-outlet>
       </main>

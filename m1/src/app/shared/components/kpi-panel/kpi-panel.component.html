@@ -1,7 +1,10 @@
 @if (def) {
   <div class="kpi-card as-card" [class.kpi-card--inactive]="!active">
     <div class="kpi-card__header">
-      <span class="kpi-card__code mono">{{ def.code }}</span>
+      <div class="kpi-card__code-group">
+        <span class="kpi-card__code mono">{{ def.code }}</span>
+        <span class="kpi-card__info" [attr.data-tooltip]="def.description">ⓘ</span>
+      </div>
       <span class="kpi-card__status" [style.color]="statusColor">
         <span class="kpi-card__status-dot" [style.background]="statusColor"></span>
         {{ statusLabel }}

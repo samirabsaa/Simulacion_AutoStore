@@ -2,17 +2,15 @@ import { Routes } from '@angular/router';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'panel', pathMatch: 'full' },
+  { path: 'grilla', redirectTo: 'monitor', pathMatch: 'full' },
+  { path: 'simulacion', redirectTo: 'monitor', pathMatch: 'full' },
   {
     path: 'panel',
     loadComponent: () => import('./pages/dashboard/dashboard.page').then(m => m.DashboardPage),
   },
   {
-    path: 'grilla',
-    loadComponent: () => import('./pages/grilla/grilla.page').then(m => m.GrillaPage),
-  },
-  {
-    path: 'simulacion',
-    loadComponent: () => import('./pages/simulacion/simulacion.page').then(m => m.SimulacionPage),
+    path: 'monitor',
+    loadComponent: () => import('./pages/monitor/monitor.page').then(m => m.MonitorPage),
   },
   {
     path: 'reportes',

@@ -40,16 +40,12 @@ export class ConfigPage implements OnInit, OnDestroy {
   setZ(e: Event)   { this.busService.setField({ grid: { ...this.busService.state.grid, z: +(<HTMLInputElement>e.target).value } }); }
   setR(e: Event)   { this.busService.setField({ numRobots:        +(<HTMLInputElement>e.target).value }); }
   setOcc(e: Event) { this.busService.setField({ ocupacionInicial: +(<HTMLInputElement>e.target).value }); }
-  setPed(e: Event) { this.busService.setField({ pedidosDemandados:+(<HTMLInputElement>e.target).value }); }
 
   setNombre(e: Event)  { this.busService.setField({ nombreEjecucion: (<HTMLInputElement>e.target).value }); }
   setSemilla(e: Event) { this.busService.setField({ semilla: +(<HTMLInputElement>e.target).value || 0 }); }
   randomSemilla()      { this.busService.setField({ semilla: Math.floor(Math.random() * 9e7) + 1e7 }); }
 
   setMode(m: SimMode)       { this.busService.setMode(m); }
-  setPolicy(p: PickingPolicy){ this.busService.setPolicy(p); }
-  setVelocidad(v: number)    { this.busService.setSpeed(v as 1|2|5); }
-  readonly speedOptions = [1, 2, 5];
   restaurarForus()           { this.busService.restaurarForus(); }
 
   // ── Carga real de CSV (T-29) ────────────────────────────────────────────
@@ -101,24 +97,10 @@ export class ConfigPage implements OnInit, OnDestroy {
     return this.csvTipo === 'ola' ? 'ola.csv' : 'reposicion.csv';
   }
 
-  // ── Validation ──────────────────────────────────────────────────────────
+  // ── Computed ────────────────────────────────────────────────────────────
   get capacidad(): number {
     const g = this.bus?.grid ?? { x:12, y:10, z:5 };
     return g.x * g.y * g.z;
-  }
-
-  get validaciones(): { sev: 'ok'|'warn'|'error'; msg: string }[] {
-    const g = this.bus?.grid ?? { x:12, y:10, z:5 };
-    const robots = this.bus?.numRobots ?? 8;
-    const occ = this.bus?.ocupacionInicial ?? 78;
-    const cap = g.x * g.y * g.z;
-    const list: { sev: 'ok'|'warn'|'error'; msg: string }[] = [];
-    if (cap > 8000) list.push({ sev:'error', msg:`Capacidad ${cap.toLocaleString('es-CL')} celdas supera el máximo académico de 8.000.` });
-    else if (g.x > 20 || g.y > 20 || g.z > 5) list.push({ sev:'warn', msg:'Grilla sobre la referencia de rendimiento (20×20×5 con 10 robots). FPS puede degradarse.' });
-    if (robots > 10) list.push({ sev:'warn', msg:`${robots} robots: sobre los 10 del hardware de referencia (RNF-01).` });
-    if (occ < 60 || occ > 90) list.push({ sev:'warn', msg:'Ocupación fuera del rango analítico recomendado (60–90%).' });
-    if (list.length === 0) list.push({ sev:'ok', msg:'Parámetros válidos. Coinciden con lo que se publicará al Bus.' });
-    return list;
   }
 
   get paramError(): boolean { return this.capacidad > 8000; }
@@ -147,8 +129,7 @@ export class ConfigPage implements OnInit, OnDestroy {
     if (!b) return false;
     return b.grid.x === FORUS_DEFAULTS.grid.x && b.grid.y === FORUS_DEFAULTS.grid.y &&
            b.grid.z === FORUS_DEFAULTS.grid.z && b.numRobots === FORUS_DEFAULTS.numRobots &&
-           b.ocupacionInicial === FORUS_DEFAULTS.ocupacionInicial &&
-           b.pedidosDemandados === FORUS_DEFAULTS.pedidosDemandados;
+           b.ocupacionInicial === FORUS_DEFAULTS.ocupacionInicial;
   }
 
   get configJson(): string {
@@ -164,7 +145,6 @@ export class ConfigPage implements OnInit, OnDestroy {
       archivo_datos: this.csvArchivoNombre,
       politica_picking: b.policy === PickingPolicy.FIFO ? 'fifo' : 'prioridad_posicion',
       velocidad: `${b.velocidad}x`,
-      pedidos_demandados: b.pedidosDemandados,
     }, null, 2);
   }
 
@@ -174,6 +154,24 @@ export class ConfigPage implements OnInit, OnDestroy {
   goHeadless(): void { this.busService.setField({ falloSistema: null, omniverse: 'headless' }); }
 
   // ── Start ────────────────────────────────────────────────────────────────
+  guardarConfig(): void {
+    const s = this.busService.state;
+    const data = {
+      x: s.grid.x,
+      y: s.grid.y,
+      z: s.grid.z,
+      robots: s.numRobots,
+      ocupacion: s.ocupacionInicial / 100,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'config.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   iniciar(): void {
     if (!this.puedeIniciar) return;
     this.busService.startSimulation();
