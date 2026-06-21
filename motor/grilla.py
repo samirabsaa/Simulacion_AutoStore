@@ -29,6 +29,10 @@ class Grilla:
         self._celdas: dict[tuple[int, int, int], Caja] = {}
         self._delta: list[Caja] = []
         self._remove: list[tuple[int, int, int]] = []
+        # Anillo perimetral de tránsito (Feature 1): columnas (x,y) del borde
+        # reservadas exclusivamente para el desplazamiento de robots. No admiten
+        # cajas. Vacío si config.anillo_transito es False (comportamiento previo).
+        self._transito: set[tuple[int, int]] = self._calcular_anillo()
         self._puertos: list[tuple[int, int]] = self._calcular_puertos()
 
     # ------------------------------------------------------------------
@@ -45,7 +49,14 @@ class Grilla:
                       else cap * self.config.ocupacion_inicial)
 
         gx, gy, gz = self.config.grilla.x, self.config.grilla.y, self.config.grilla.z
-        todas_celdas = [(x, y, z) for x in range(gx) for y in range(gy) for z in range(gz)]
+        # Solo celdas almacenables: el anillo de tránsito (si existe) se excluye.
+        todas_celdas = [
+            (x, y, z)
+            for x in range(gx) for y in range(gy) for z in range(gz)
+            if not self.es_transito(x, y)
+        ]
+        # Recalcular n_cajas sobre la capacidad almacenable real (no la bruta).
+        n_cajas = min(n_cajas, len(todas_celdas))
         rng.shuffle(todas_celdas)
 
         skus = [f"SKU{i:03d}" for i in range(1, 11)]
@@ -68,7 +79,14 @@ class Grilla:
 
     def agregar(self, caja: Caja) -> None:
         """Coloca una caja en su celda (x,y,z). Si había una caja anterior la
-        reemplaza (comportamiento de merge-by-cell del bus)."""
+        reemplaza (comportamiento de merge-by-cell del bus).
+
+        Lanza ValueError si la celda pertenece al anillo de tránsito: el anillo
+        es exclusivo para desplazamiento de robots (Feature 1)."""
+        if self.es_transito(caja.x, caja.y):
+            raise ValueError(
+                f"Celda ({caja.x},{caja.y}) es de tránsito (anillo): no admite cajas."
+            )
         key = (caja.x, caja.y, caja.z)
         self._celdas[key] = caja
         self._delta.append(caja)
@@ -98,7 +116,10 @@ class Grilla:
         return [self._celdas[(x, y, z)] for z in range(gz) if (x, y, z) in self._celdas]
 
     def celdas_libres_en_columna(self, x: int, y: int) -> list[int]:
-        """Niveles z disponibles (sin caja) en la columna (x,y), de menor a mayor."""
+        """Niveles z disponibles (sin caja) en la columna (x,y), de menor a mayor.
+        Una columna de tránsito (anillo) nunca tiene niveles almacenables."""
+        if self.es_transito(x, y):
+            return []
         gz = self.config.grilla.z
         return [z for z in range(gz) if (x, y, z) not in self._celdas]
 
@@ -134,7 +155,10 @@ class Grilla:
     # ------------------------------------------------------------------
 
     def _calcular_puertos(self) -> list[tuple[int, int]]:
-        """Puertos = celdas del borde perimetral del plano XY."""
+        """Puertos = celdas del borde perimetral del plano XY.
+
+        Cuando el anillo de tránsito está activo, los puertos coinciden con el
+        anillo (los robots entregan desde el corredor perimetral)."""
         gx, gy = self.config.grilla.x, self.config.grilla.y
         puertos = set()
         for x in range(gx):
@@ -144,6 +168,45 @@ class Grilla:
             puertos.add((0, y))
             puertos.add((gx - 1, y))
         return sorted(puertos)
+
+    # ------------------------------------------------------------------
+    # Anillo perimetral de tránsito (Feature 1)
+    # ------------------------------------------------------------------
+
+    def _calcular_anillo(self) -> set[tuple[int, int]]:
+        """Columnas (x,y) del borde reservadas para tránsito, si está activo.
+
+        Requiere un interior no vacío (grilla ≥ 3×3); en grillas más pequeñas
+        el anillo se desactiva para no dejar la zona almacenable en cero."""
+        if not getattr(self.config, "anillo_transito", False):
+            return set()
+        gx, gy = self.config.grilla.x, self.config.grilla.y
+        if gx < 3 or gy < 3:
+            return set()
+        anillo: set[tuple[int, int]] = set()
+        for x in range(gx):
+            anillo.add((x, 0))
+            anillo.add((x, gy - 1))
+        for y in range(gy):
+            anillo.add((0, y))
+            anillo.add((gx - 1, y))
+        return anillo
+
+    def es_transito(self, x: int, y: int) -> bool:
+        """True si la columna (x,y) pertenece al anillo de tránsito (sin cajas)."""
+        return (x, y) in self._transito
+
+    @property
+    def anillo(self) -> list[tuple[int, int]]:
+        """Celdas (x,y) del anillo de tránsito, ordenadas (vacío si inactivo)."""
+        return sorted(self._transito)
+
+    @property
+    def capacidad_almacenable(self) -> int:
+        """Capacidad real para cajas: capacidad bruta menos las columnas de
+        tránsito × Z. Igual a capacidad_total cuando no hay anillo."""
+        gz = self.config.grilla.z
+        return self.config.grilla.capacidad_total - len(self._transito) * gz
 
     @property
     def puertos(self) -> list[tuple[int, int]]:
@@ -158,8 +221,11 @@ class Grilla:
     # ------------------------------------------------------------------
 
     def iog(self) -> float:
-        """Índice de Ocupación de Grilla: cajas_presentes / capacidad_total * 100."""
-        cap = self.config.grilla.capacidad_total
+        """Índice de Ocupación de Grilla: cajas_presentes / capacidad_almacenable * 100.
+
+        El denominador excluye el anillo de tránsito (Feature 1): el IOG mide
+        ocupación de la zona que realmente puede almacenar cajas."""
+        cap = self.capacidad_almacenable
         return len(self._celdas) / cap * 100 if cap > 0 else 0.0
 
     @property

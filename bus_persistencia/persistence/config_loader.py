@@ -5,12 +5,55 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from bus_persistencia.models.state import Config, GrillaDimensions
+from bus_persistencia.models.state import (
+    Config,
+    Estacion,
+    GrillaDimensions,
+    Orientacion,
+    TipoEstacion,
+)
 from bus_persistencia.persistence.validation import ValidationResult
 
 
 class ConfigParseError(Exception):
     """Error al parsear o validar config.json."""
+
+
+def _parse_estaciones(raw: object, errors: list[str]) -> tuple[Estacion, ...]:
+    """Parsea la lista opcional `estaciones` de config.json.
+
+    Cada entrada: {id, x, y, tipo: "cinta"|"carrusel", orientacion: "N"|"E"|"O"}.
+    Entradas inválidas se registran en `errors` y se omiten. Lista ausente → ()."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        errors.append("Campo 'estaciones' debe ser una lista")
+        return ()
+
+    estaciones: list[Estacion] = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, dict):
+            errors.append(f"estaciones[{i}] debe ser un objeto")
+            continue
+        try:
+            tipo = TipoEstacion(str(item.get("tipo", "cinta")).lower())
+        except ValueError:
+            errors.append(f"estaciones[{i}].tipo inválido: {item.get('tipo')!r}")
+            continue
+        try:
+            orient = Orientacion(str(item.get("orientacion", "N")).upper())
+        except ValueError:
+            errors.append(f"estaciones[{i}].orientacion inválida: {item.get('orientacion')!r}")
+            continue
+        x, y = item.get("x"), item.get("y")
+        if not isinstance(x, int) or not isinstance(y, int):
+            errors.append(f"estaciones[{i}].x/y deben ser enteros")
+            continue
+        estaciones.append(Estacion(
+            id=str(item.get("id", f"E{i:02d}")),
+            x=x, y=y, tipo=tipo, orientacion_requerida=orient,
+        ))
+    return tuple(estaciones)
 
 
 PERFORMANCE_GRID_LIMIT = (20, 20, 5)
@@ -80,6 +123,10 @@ def validate_config_data(data: dict) -> ValidationResult[Config]:
                 f"{PERFORMANCE_ROBOT_LIMIT} (T-23)"
             )
 
+    # Campos opcionales de extensión M3 (no invalidan config si faltan)
+    anillo = bool(data.get("anillo_transito", False))
+    estaciones = _parse_estaciones(data.get("estaciones"), errors)
+
     if errors or grilla is None:
         return ValidationResult(data=None, errors=[], warnings=warnings)
 
@@ -87,6 +134,8 @@ def validate_config_data(data: dict) -> ValidationResult[Config]:
         grilla=grilla,
         robots=int(robots),
         ocupacion_inicial=float(ocupacion),
+        anillo_transito=anillo,
+        estaciones=estaciones,
     )
     return ValidationResult(data=config, errors=[], warnings=warnings)
 

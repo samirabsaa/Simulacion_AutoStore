@@ -29,6 +29,28 @@ class RobotEstado(str, Enum):
     BLOQUEADO = "bloqueado"
     ENTREGANDO = "entregando"
     REPONIENDO = "reponiendo"
+    # --- Estados M3 (Mente Colmena / handoff / orientación) ---
+    ROTANDO = "rotando"                    # girando para alinearse con una estación
+    NECESITA_HANDOFF = "necesita_handoff"  # cargado pero mal orientado, busca receptor
+    EN_TRANSITO_ANILLO = "en_transito_anillo"  # redirigido al anillo de tránsito
+
+
+class Orientacion(str, Enum):
+    """Orientación del robot frente a una estación de entrega.
+
+    Restringida a Norte / Este / Oeste — el Sur se excluye intencionalmente
+    porque corresponde a la cara del puerto físico contra la que el robot no
+    puede posicionarse (restricción del layout real de Forus, no del modelo).
+    """
+    NORTE = "N"
+    ESTE = "E"
+    OESTE = "O"
+
+
+class TipoEstacion(str, Enum):
+    """Tipo de estación de ingreso/entrega y su capacidad por tick."""
+    CINTA = "cinta"        # procesa 1 producto por tick
+    CARRUSEL = "carrusel"  # procesa 2 productos por tick
 
 
 KPI_NAMES = ("TSP", "TPCP", "MTRP", "IOG", "TR", "TI", "TBR")
@@ -46,10 +68,31 @@ class GrillaDimensions:
 
 
 @dataclass(frozen=True)
+class Estacion:
+    """Estación de ingreso/entrega ubicada en una celda del perímetro.
+
+    `orientacion_requerida` es la orientación que el robot debe presentar para
+    poder entregar. `capacidad_tick` se deriva del tipo (Cinta=1, Carrusel=2).
+    """
+    id: str
+    x: int
+    y: int
+    tipo: TipoEstacion = TipoEstacion.CINTA
+    orientacion_requerida: Orientacion = Orientacion.NORTE
+
+    @property
+    def capacidad_tick(self) -> int:
+        return 2 if self.tipo == TipoEstacion.CARRUSEL else 1
+
+
+@dataclass(frozen=True)
 class Config:
     grilla: GrillaDimensions
     robots: int
     ocupacion_inicial: float
+    # --- Extensiones M3 (opcionales — default preserva comportamiento previo) ---
+    anillo_transito: bool = False          # anillo perimetral solo-tránsito (sin cajas)
+    estaciones: tuple[Estacion, ...] = ()  # estaciones Cinta/Carrusel; () = sin restricción
 
 
 SimConfig = Config
@@ -73,6 +116,7 @@ class Robot:
     z: int
     estado: RobotEstado
     carga_id: str | None = None
+    orientacion: Orientacion = Orientacion.NORTE
 
 
 @dataclass(frozen=True)

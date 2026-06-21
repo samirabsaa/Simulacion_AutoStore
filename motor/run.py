@@ -9,15 +9,17 @@ from __future__ import annotations
 
 import argparse
 import csv
+import random
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 from bus_persistencia.bus.state_bus import StateBus
-from bus_persistencia.models.state import Caja, KPISet, ModoTurno, PoliticaPicking, Robot
+from bus_persistencia.models.state import Caja, KPISet, ModoTurno, Pedido, PoliticaPicking, Robot
 from bus_persistencia.persistence.config_loader import load_config
 from bus_persistencia.persistence.execution_metadata import (
+    ExecutionMetadata,
     MetadataStore,
     create_execution_metadata,
     file_hash,
@@ -30,6 +32,33 @@ from motor.simulador import AutoStoreSimulator
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 OUTPUT_DIR = ROOT / "output"
+
+
+_POOL_SKUS = [f"SKU-{chr(65 + i)}" for i in range(10)]  # SKU-A .. SKU-J
+_POOL_DESTINOS = [
+    "Tienda_01", "Tienda_02", "Tienda_03", "Tienda_04", "Tienda_05",
+    "Ecommerce_01", "Ecommerce_02", "Ecommerce_03",
+]
+
+
+def generar_ola_aleatoria(gx: int, gy: int, seed: int) -> list[Pedido]:
+    """Genera una ola de pedidos aleatoria proporcional al tamaño de la grilla.
+
+    Cantidad de pedidos: max(4, gx * gy // 5).
+    SKUs elegidos del pool SKU-A..SKU-J; cantidades entre 1 y 3.
+    Determinista para la misma seed.
+    """
+    rng = random.Random(seed)
+    n_pedidos = max(4, (gx * gy) // 5)
+    pedidos: list[Pedido] = []
+    for i in range(1, n_pedidos + 1):
+        pedidos.append(Pedido(
+            id_pedido=f"P{i:04d}",
+            id_sku=rng.choice(_POOL_SKUS),
+            cantidad=rng.randint(1, 3),
+            destino=rng.choice(_POOL_DESTINOS),
+        ))
+    return pedidos
 
 
 def _asegurar_cajas_para_skus(sim: AutoStoreSimulator) -> None:
@@ -103,6 +132,7 @@ def ejecutar_sesion(
     use_rich: bool = True,
     use_ansi_clear: bool = True,
     show_matrix: bool = False,
+    random_ola: bool = False,
 ) -> dict:
     """Ejecuta una sesión de simulación completa y retorna resultados."""
     output = Path(output_dir)
@@ -115,22 +145,37 @@ def ejecutar_sesion(
     config_result = load_config(config_path)
     if not config_result.is_valid:
         raise SystemExit(f"Error en config: {config_result.errors}")
-    ola_result = load_ola(ola_path)
-    if not ola_result.is_valid:
-        raise SystemExit(f"Error en ola: {ola_result.errors}")
+
+    if random_ola:
+        gx = config_result.data.grilla.x
+        gy = config_result.data.grilla.y
+        pedidos = generar_ola_aleatoria(gx, gy, seed)
+    else:
+        ola_result = load_ola(ola_path)
+        if not ola_result.is_valid:
+            raise SystemExit(f"Error en ola: {ola_result.errors}")
+        pedidos = ola_result.data
 
     # --- Configurar bus ---
     logger = SessionLogger(output_dir=output, session_name=session_name)
     bus = StateBus(session_logger=logger)
     bus.set_config(config_result.data)
-    bus.set_pedidos_cola(ola_result.data)
+    bus.set_pedidos_cola(pedidos)
     bus.set_policy(politica)
 
     # --- Configurar metadata ---
-    meta = create_execution_metadata(
-        session_name, seed, "diurno", politica.value,
-        config_path, ola_path,
-    )
+    if random_ola:
+        meta = ExecutionMetadata(
+            nombre_ejecucion=session_name, semilla=seed,
+            modo="diurno", politica=politica.value,
+            config_path=str(config_path), data_path="random",
+            config_hash=file_hash(config_path), data_hash=f"random_seed_{seed}",
+        )
+    else:
+        meta = create_execution_metadata(
+            session_name, seed, "diurno", politica.value,
+            config_path, ola_path,
+        )
 
     # --- Inicializar simulador ---
     sim = AutoStoreSimulator(bus)
@@ -147,7 +192,7 @@ def ejecutar_sesion(
         print(f"  Grilla: {sim._grilla.config.grilla.x}×{sim._grilla.config.grilla.y}×{sim._grilla.config.grilla.z}")
         print(f"  Cajas iniciales: {sim._grilla.total_cajas}")
         print(f"  Robots: {n_robots}")
-        print(f"  Pedidos: {n_pedidos}")
+        print(f"  Pedidos: {n_pedidos}" + (" (aleatorios)" if random_ola else ""))
         print(f"  Política: {politica.value}")
         print(f"  Semilla: {seed}")
         print()
@@ -287,6 +332,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                     help="No limpia la pantalla entre ticks (DEBUG)")
     p.add_argument("--matrix", action="store_true",
                     help="Incluye vista de matriz 2D de la grilla en tiempo real")
+    p.add_argument("--random", action="store_true",
+                    help="Genera ola de pedidos aleatoria (proporcional a la grilla, usa --seed)")
     return p.parse_args(argv)
 
 
@@ -300,6 +347,7 @@ def main(argv: list[str] | None = None) -> int:
     use_rich = not args.no_rich and RICH_AVAILABLE
     use_ansi_clear = not args.no_clear
     show_matrix = args.matrix
+    random_ola = args.random
 
     if args.compare:
         print("=== Ejecutando Demo FIFO (75%) ===")
@@ -317,6 +365,7 @@ def main(argv: list[str] | None = None) -> int:
             use_rich=use_rich,
             use_ansi_clear=use_ansi_clear,
             show_matrix=show_matrix,
+            random_ola=random_ola,
         )
         print()
         print("=== Ejecutando Demo Prioridad (90%) ===")
@@ -334,6 +383,7 @@ def main(argv: list[str] | None = None) -> int:
             use_rich=use_rich,
             use_ansi_clear=use_ansi_clear,
             show_matrix=show_matrix,
+            random_ola=random_ola,
         )
         print()
         print("=== Generando reporte comparativo ===")
@@ -355,6 +405,7 @@ def main(argv: list[str] | None = None) -> int:
             use_rich=use_rich,
             use_ansi_clear=use_ansi_clear,
             show_matrix=show_matrix,
+            random_ola=random_ola,
         )
 
     return 0

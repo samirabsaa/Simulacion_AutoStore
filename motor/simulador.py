@@ -58,6 +58,11 @@ class AutoStoreSimulator:
         self.kpis: KPISet = KPISet()
         self._acum: Acumuladores = Acumuladores()
 
+        # Condición de término por ola (Feature 5): tamaño del lote de pedidos
+        # cargado al inicio. La sesión se detiene al completar el 100%.
+        self.total_ola: int = 0
+        self._ola_completada_emitida: bool = False
+
         # Buffers de delta — se vacían en _construir_delta()
         self._grilla_delta: list[Caja] = []
         self._grilla_remove: list[tuple[int, int, int]] = []
@@ -114,6 +119,7 @@ class AutoStoreSimulator:
         # Leer pedidos y cola de reposición que M1 ya cargó en el bus
         self.pedidos_cola = list(snap.pedidos.cola)
         self._acum.pedidos_demandados = len(self.pedidos_cola)
+        self.total_ola = len(self.pedidos_cola)  # tamaño de la ola (Feature 5)
         self.modo = snap.modo
 
         # Construir despachador (T-12 — Manuel)
@@ -150,6 +156,18 @@ class AutoStoreSimulator:
         self._resolver_colisiones()
         self._actualizar_kpis()
 
+        # Condición de término por ola (Feature 5): emitir señal una sola vez,
+        # DESPUÉS de aplicar las entregas del tick (para no cortar un tick antes
+        # de la última entrega real).
+        if self.ola_completa() and not self._ola_completada_emitida:
+            self._ola_completada_emitida = True
+            self._eventos_pendientes.append({
+                "tipo": "ola_completada",
+                "tick": self.tick + 1,
+                "pedidos": len(self.pedidos_completados),
+                "total_ola": self.total_ola,
+            })
+
         delta = self._construir_delta()
         self.tick = self.bus.write_tick_delta(M2_WRITER_ID, delta)
 
@@ -159,8 +177,21 @@ class AutoStoreSimulator:
         self.modo = nuevo_modo
         self._acum.ticks_turno_actual = 0
 
+    def ola_completa(self) -> bool:
+        """True cuando el 100% de los pedidos de la ola han sido completados.
+
+        Condición de término principal (Feature 5): se evalúa contra el tamaño
+        del lote (`total_ola`) capturado al inicializar, no contra la cola, para
+        que un pedido insatisfacible (sin caja del SKU) no quede colgado — la ola
+        se considera completa solo si TODOS sus pedidos llegaron a un puerto."""
+        return self.total_ola > 0 and len(self.pedidos_completados) >= self.total_ola
+
     def ha_terminado(self) -> bool:
-        """Sesión terminada cuando no quedan pedidos pendientes ni en proceso."""
+        """Sesión terminada cuando se completa el 100% de la ola, o bien cuando
+        no quedan pedidos pendientes ni robots activos (fallback para olas con
+        pedidos insatisfacibles)."""
+        if self.ola_completa():
+            return True
         return (
             len(self.pedidos_cola) == 0
             and all(r.estado == RobotEstado.INACTIVO for r in self.robots.values())
