@@ -1,0 +1,42 @@
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { GridConfig, toDTO } from '../models/grid-config.model';
+import { ValidationResultDTO } from '../models/csv-validation-error.model';
+import { PickingPolicy } from '../enums/sim.enums';
+import { environment } from '../../../environments/environment';
+
+@Injectable({ providedIn: 'root' })
+export class SimApiService {
+  constructor(private http: HttpClient) {}
+
+  sendConfig(cfg: GridConfig): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(`${environment.apiUrl}/config`, toDTO(cfg));
+  }
+
+  setPolicy(p: PickingPolicy): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(`${environment.apiUrl}/policy`, { policy: p });
+  }
+
+  play(): Observable<{ ok: boolean; status?: string }> {
+    return this.http.post<{ ok: boolean; status?: string }>(`${environment.apiUrl}/control/play`, {});
+  }
+
+  pause(): Observable<{ ok: boolean; status?: string }> {
+    return this.http.post<{ ok: boolean; status?: string }>(`${environment.apiUrl}/control/pause`, {});
+  }
+
+  reset(): Observable<{ ok: boolean; status?: string }> {
+    return this.http.post<{ ok: boolean; status?: string }>(`${environment.apiUrl}/control/reset`, {});
+  }
+
+  setSpeed(s: number): Observable<{ ok: boolean; velocidad?: number }> {
+    return this.http.post<{ ok: boolean; velocidad?: number }>(`${environment.apiUrl}/control/speed`, { velocidad: s });
+  }
+
+  uploadCsv(file: File, tipo: 'ola' | 'reposicion'): Observable<ValidationResultDTO> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<ValidationResultDTO>(`${environment.apiUrl}/api/upload/${tipo}`, form);
+  }
+}

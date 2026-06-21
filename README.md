@@ -6,6 +6,7 @@ Repositorio del simulador AutoStore. Remoto: `https://github.com/samirabsaa/Simu
 
 ```
 Simulacion_AutoStore/
+├── api/                  # Bridge FastAPI — endpoints REST + WebSocket
 ├── bus_persistencia/     # Módulo Bus + Persistencia — T-01 a T-08
 ├── motor/                # Módulo M2 — Motor de Simulación
 │   ├── simulador.py      # Orquestador central
@@ -15,13 +16,110 @@ Simulacion_AutoStore/
 │   ├── kpis.py           # Cálculo de los 7 KPIs
 │   ├── modos.py          # Turno diurno y nocturno
 │   └── run.py            # Standalone runner (CLI)
+├── m1/                   # Módulo M1 — Frontend Angular/Ionic
 ├── tests/                # Tests del motor M2 (57 tests)
 ├── data/                 # config.json, ola.csv, reposicion.csv
 ├── docs/                 # Contrato API, guías de uso
 └── output/               # sesion_*.csv, metadata, reporte_comp (runtime)
 ```
 
-## Requisitos
+---
+
+## Levantar el sistema completo (M1 + M2)
+
+### Requisitos previos
+
+| Herramienta | Versión mínima | Verificar |
+|---|---|---|
+| Python | 3.9+ | `python3 --version` |
+| Node.js | 18+ | `node --version` |
+| npm | 9+ | `npm --version` |
+
+---
+
+### Backend (M2 + bridge FastAPI)
+
+El backend expone la API REST y el WebSocket en `http://localhost:8000`.
+
+#### Instalación (primera vez)
+
+```bash
+# Desde la raíz del repo: Simulacion_AutoStore/
+python3 -m venv venv
+source venv/bin/activate          # Linux / macOS
+# venv\Scripts\activate           # Windows
+
+pip install -r requirements.txt
+```
+
+#### Encender
+
+```bash
+# Desde Simulacion_AutoStore/ con el venv activo
+source venv/bin/activate
+uvicorn api.server:app --reload --port 8000
+```
+
+El servidor queda corriendo en `http://localhost:8000`. La bandera `--reload`
+recarga automáticamente al guardar cambios en el código.
+
+#### Apagar
+
+Presiona `Ctrl + C` en la terminal donde corre uvicorn.
+
+Para desactivar el entorno virtual:
+
+```bash
+deactivate
+```
+
+---
+
+### Frontend (M1 — Angular/Ionic)
+
+El frontend corre en `http://localhost:8100` y se conecta automáticamente al
+backend en `localhost:8000`.
+
+#### Instalación (primera vez)
+
+```bash
+cd m1/
+npm install
+```
+
+#### Encender
+
+```bash
+cd m1/
+npm start           # equivalente a: npx ionic serve
+```
+
+El navegador se abre solo en `http://localhost:8100`. El servidor recarga al
+guardar cambios en el código fuente.
+
+#### Apagar
+
+Presiona `Ctrl + C` en la terminal donde corre el servidor de desarrollo.
+
+---
+
+### Orden recomendado al trabajar
+
+```
+1. Levantar backend  →  source venv/bin/activate && uvicorn api.server:app --reload --port 8000
+2. Levantar frontend →  cd m1/ && npm start
+3. Abrir navegador   →  http://localhost:8100
+4. Apagar frontend   →  Ctrl+C en la terminal del frontend
+5. Apagar backend    →  Ctrl+C en la terminal del backend, luego deactivate
+```
+
+> Si solo quieres probar la UI sin el backend, el frontend igual arranca y el
+> heatmap anima localmente. Las llamadas HTTP/WS fallan en silencio hasta que
+> el backend esté disponible.
+
+---
+
+## Requisitos previos (solo backend, sin frontend)
 
 - Python 3.9+
 - `pip install -r requirements.txt`

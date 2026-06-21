@@ -1,0 +1,63 @@
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+
+  &__btns {
+    display: flex;
+    gap: 8px;
+  }
+
+  &__btn {
+    width: 44px;
+    height: 44px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    background: var(--surface-app);
+    color: var(--text-primary);
+    transition: background 120ms ease;
+
+    &:hover { background: var(--border-card); }
+
+    &--primary {
+      background: var(--brand);
+      color: #fff;
+      &:hover { background: var(--brand-hover); }
+    }
+  }
+
+  &__speed {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--surface-app);
+    border-radius: var(--radius-md);
+  }
+
+  &__speed-btn {
+    height: 36px;
+    padding: 0 14px;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    background: transparent;
+    color: var(--text-muted);
+    transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+
+    &--active {
+      background: var(--surface-card);
+      color: var(--text-primary);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+  }
+}
