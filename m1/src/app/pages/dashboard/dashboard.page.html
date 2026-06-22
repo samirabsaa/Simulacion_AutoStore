@@ -50,6 +50,16 @@
     </div>
   }
 
+  <!-- Fleet status -->
+  @if (bus) {
+    <div class="as-card panel__robot-panel">
+      <app-robot-status-panel
+        [robots]="bus.robots"
+        [tick]="bus.tick">
+      </app-robot-status-panel>
+    </div>
+  }
+
   <!-- KPI section -->
   @if (bus) {
     <div>
@@ -65,21 +75,21 @@
           <app-kpi-panel
             [def]="def"
             [value]="kpiValues[def.id] || 0"
-            [active]="isKpiActive(def)">
+            [active]="isKpiActive(def)"
+            [chartActive]="selectedKpi === def.id"
+            (chartToggle)="onChartToggle(def.id)">
           </app-kpi-panel>
         }
-
       </div>
-    </div>
-  }
 
-  <!-- Fleet status -->
-  @if (bus) {
-    <div class="as-card panel__robot-panel">
-      <app-robot-status-panel
-        [robots]="bus.robots"
-        [tick]="bus.tick">
-      </app-robot-status-panel>
+      @if (selectedKpi) {
+        <div class="as-card panel__chart">
+          <app-kpi-chart
+            [kpiId]="selectedKpi"
+            [history]="busService.kpiHistory">
+          </app-kpi-chart>
+        </div>
+      }
     </div>
   }
 

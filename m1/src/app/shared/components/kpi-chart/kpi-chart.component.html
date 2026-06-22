@@ -1,0 +1,11 @@
+@if (kpiId && meta) {
+  <div class="chart-wrap">
+    <div class="chart-wrap__header">
+      <span class="chart-wrap__title">{{ meta.label }}</span>
+      <span class="chart-wrap__meta">{{ history.length }} ticks</span>
+    </div>
+    <div class="chart-wrap__canvas">
+      <canvas #canvas></canvas>
+    </div>
+  </div>
+}

@@ -6,6 +6,7 @@ import { SimMode, PickingPolicy, SimStatus } from '../../core/enums/sim.enums';
 import { BusStripComponent } from '../../shared/components/bus-strip/bus-strip.component';
 import { KpiPanelComponent, KpiDef } from '../../shared/components/kpi-panel/kpi-panel.component';
 import { RobotStatusPanelComponent } from '../../shared/components/robot-status-panel/robot-status-panel.component';
+import { KpiChartComponent, ChartKpiId } from '../../shared/components/kpi-chart/kpi-chart.component';
 
 const KPI_DEFS: KpiDef[] = [
   { id: 'TSP',  code: 'KPI-01', name: 'Tasa de Satisfacción de Pedidos',      unit: '%',       meta: '≥ 95%',        better: 'higher', threshold: 95, modes: [SimMode.DIURNO],
@@ -28,7 +29,7 @@ const KPI_DEFS: KpiDef[] = [
   selector: 'app-dashboard',
   templateUrl: './dashboard.page.html',
   styleUrls: ['./dashboard.page.scss'],
-  imports: [BusStripComponent, KpiPanelComponent, RobotStatusPanelComponent, RouterLink],
+  imports: [BusStripComponent, KpiPanelComponent, RobotStatusPanelComponent, KpiChartComponent, RouterLink],
 })
 export class DashboardPage implements OnInit, OnDestroy {
   bus: BusState | null = null;
@@ -40,7 +41,13 @@ export class DashboardPage implements OnInit, OnDestroy {
   readonly SimStatus = SimStatus;
   readonly PickingPolicy = PickingPolicy;
 
-  constructor(private busService: BusClientService) {}
+  selectedKpi: ChartKpiId | null = null;
+
+  constructor(public busService: BusClientService) {}
+
+  onChartToggle(id: ChartKpiId): void {
+    this.selectedKpi = this.selectedKpi === id ? null : id;
+  }
 
   ngOnInit(): void {
     this.sub = this.busService.bus$.subscribe(s => {

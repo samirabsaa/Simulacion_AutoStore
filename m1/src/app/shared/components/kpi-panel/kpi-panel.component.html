@@ -3,6 +3,7 @@
     <div class="kpi-card__header">
       <div class="kpi-card__code-group">
         <span class="kpi-card__code mono">{{ def.code }}</span>
+        <button class="kpi-card__chart-btn" [class.kpi-card__chart-btn--active]="chartActive" (click)="chartToggle.emit()" title="Ver gráfico">📈</button>
         <span class="kpi-card__info" [attr.data-tooltip]="def.description">ⓘ</span>
       </div>
       <span class="kpi-card__status" [style.color]="statusColor">

@@ -14,7 +14,7 @@
              routerLinkActive="sidebar__nav-item--active"
              class="sidebar__nav-item">
             <span class="sidebar__nav-accent"></span>
-            <span class="sidebar__nav-icon">{{ item.icon }}</span>
+            <span class="sidebar__nav-icon"><ion-icon [name]="item.icon"></ion-icon></span>
             <span class="sidebar__nav-label">{{ item.label }}</span>
           </a>
         }

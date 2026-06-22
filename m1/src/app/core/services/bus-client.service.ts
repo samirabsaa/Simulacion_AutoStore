@@ -6,6 +6,17 @@ import { WsTickPayload, WsSystemErrorPayload, WsRobotState, WsGrillaCell } from 
 import { SimApiService } from './sim-api.service';
 import { environment } from '../../../environments/environment';
 
+export interface KpiHistoryEntry {
+  tick: number;
+  TSP: number;
+  TPCP: number;
+  MTRP: number;
+  IOG: number;
+  TR: number;
+  TI: number;
+  TBR: number;
+}
+
 export interface KpisComputed {
   TSP: number;
   TPCP: number;
@@ -71,6 +82,10 @@ const INITIAL_STATE: BusState = {
 @Injectable({ providedIn: 'root' })
 export class BusClientService implements OnDestroy {
   private readonly _bus$ = new BehaviorSubject<BusState>({ ...INITIAL_STATE });
+
+  /** Histórico de KPIs por tick, usado por los charts en M1. */
+  kpiHistory: KpiHistoryEntry[] = [];
+
   private ws?: WebSocket;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
   private destroyed = false;
@@ -149,6 +164,10 @@ export class BusClientService implements OnDestroy {
         : (Array.isArray(msg.grilla) && msg.grilla.length > 0 ? msg.grilla : s.grilla),
       kpis,
     });
+
+    // Registrar en histórico para charts (máximo 500 puntos)
+    this.kpiHistory.push({ tick: msg.tick, TSP: kpis.TSP, TPCP: kpis.TPCP, MTRP: kpis.MTRP, IOG: kpis.IOG, TR: kpis.TR, TI: kpis.TI, TBR: kpis.TBR });
+    if (this.kpiHistory.length > 500) this.kpiHistory.shift();
   }
 
   // Mutación local pura — no envía nada al backend.
@@ -215,11 +234,13 @@ export class BusClientService implements OnDestroy {
   reset(): void {
     // Actualización optimista para dar feedback inmediato al usuario
     this.patchLocal({ tick: 0, running: false, status: SimStatus.IDLE, kpis: { ...EMPTY_KPIS }, robots: [], grilla: [] });
+    this.kpiHistory = [];
     this.simApi.reset().subscribe({ error: () => {} });
   }
 
   /** Envía la configuración actual al backend y luego inicia la simulación. */
   startSimulation(): void {
+    this.kpiHistory = [];
     const cfg = this.buildConfig();
     this.simApi.sendConfig(cfg).subscribe({
       next: () => this.simApi.play().subscribe({ error: () => {} }),

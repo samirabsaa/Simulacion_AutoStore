@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { SimMode } from '../../../core/enums/sim.enums';
 
 export interface KpiDef {
@@ -56,6 +56,8 @@ export class KpiPanelComponent {
   @Input() def!: KpiDef;
   @Input() value: number = 0;
   @Input() active: boolean = true;
+  @Input() chartActive: boolean = false;
+  @Output() chartToggle = new EventEmitter<void>();
 
   get status(): KpiStatus { return kpiStatus(this.def, this.value, this.active); }
   get statusLabel(): string { return STATUS_LABEL[this.status]; }
