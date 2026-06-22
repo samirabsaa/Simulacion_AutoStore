@@ -14,6 +14,7 @@ from typing import Callable
 from bus_persistencia.bus.state_bus import StateBus
 from bus_persistencia.models.state import Caja, Config, ModoTurno, Pedido, PoliticaPicking
 from motor.simulador import AutoStoreSimulator
+from motor.run import generar_ola_aleatoria, _asegurar_cajas_para_skus
 
 # ticks/seg declarados por M1 (1x, 2x, 5x) -> intervalo de sleep entre ticks
 VELOCIDAD_INTERVALOS: dict[int, float] = {1: 1.0, 2: 0.5, 5: 0.2}
@@ -46,6 +47,7 @@ class SimulationLoop:
         seed: int | None = None,
         modo: ModoTurno | None = None,
         politica: PoliticaPicking | None = None,
+        pedidos_demandados: int | None = None,
     ) -> None:
         """(Re)inicializa la simulación con una nueva config. Detiene el loop actual."""
         self.pause()
@@ -55,6 +57,10 @@ class SimulationLoop:
         self._modo = modo
         self._politica = politica
         self._pedidos_inicial = list(self.bus.read_snapshot().pedidos.cola)
+        if not self._pedidos_inicial and pedidos_demandados and pedidos_demandados > 0:
+            self._pedidos_inicial = generar_ola_aleatoria(
+                config.grilla.x, config.grilla.y, seed or 42,
+            )[:pedidos_demandados]
         self._reinicializar()
 
     def set_velocidad(self, velocidad: int) -> None:
@@ -111,6 +117,7 @@ class SimulationLoop:
             self.bus.set_pedidos_cola(self._pedidos_inicial)
         self._sim = AutoStoreSimulator(self.bus)
         self._sim.inicializar_desde_bus(seed=self._seed)
+        _asegurar_cajas_para_skus(self._sim)
         self.status = "IDLE"
         self._on_tick()
 

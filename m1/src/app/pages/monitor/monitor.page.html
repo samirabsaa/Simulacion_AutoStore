@@ -1,4 +1,4 @@
-<app-bus-strip></app-bus-strip>
+<app-bus-strip [bus]="bus!"></app-bus-strip>
 
 <div class="monitor-page">
 
@@ -32,6 +32,7 @@
           [gridZ]="bus.grid.z"
           [grilla]="bus.grilla"
           [robots]="bus.robots"
+          [tick]="bus.tick"
         ></app-robot-grid>
       </div>
     }

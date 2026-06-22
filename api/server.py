@@ -122,7 +122,8 @@ def post_config(cfg: GridConfigDTO) -> dict[str, Any]:
     )
     modo = MODO_FROM_M1.get(cfg.mode.upper())
     politica = POLITICA_FROM_M1.get(cfg.policy.upper())
-    loop.configurar(config, seed=cfg.semilla, modo=modo, politica=politica)
+    loop.configurar(config, seed=cfg.semilla, modo=modo, politica=politica,
+                    pedidos_demandados=cfg.pedidos_demandados)
     return {"ok": True}
 
 

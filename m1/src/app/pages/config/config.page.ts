@@ -24,6 +24,11 @@ export class ConfigPage implements OnInit, OnDestroy {
     archivoReposicion: [],
   };
 
+  private csvFileNameByField: Record<'archivoOla' | 'archivoReposicion', string> = {
+    archivoOla: '',
+    archivoReposicion: '',
+  };
+
   constructor(
     private busService: BusClientService,
     private simApi: SimApiService,
@@ -56,6 +61,7 @@ export class ConfigPage implements OnInit, OnDestroy {
 
     const tipo = this.csvTipo;
     const campo = this.csvCampo;
+    this.csvFileNameByField[campo] = file.name;
 
     this.simApi.uploadCsv(file, tipo).subscribe({
       next: (res) => {
@@ -142,8 +148,10 @@ export class ConfigPage implements OnInit, OnDestroy {
       ocupacion_inicial_pct: b.ocupacionInicial,
       semilla: b.semilla,
       modo_turno: b.mode === SimMode.DIURNO ? 'diurno_picking' : 'nocturno_reposicion',
-      archivo_datos: this.csvArchivoNombre,
+      archivo_datos: this.csvFileNameByField[this.csvCampo] || this.csvArchivoNombre,
+      estado_archivo: this.csvEstado,
       politica_picking: b.policy === PickingPolicy.FIFO ? 'fifo' : 'prioridad_posicion',
+      pedidos_demandados: b.pedidosDemandados,
       velocidad: `${b.velocidad}x`,
     }, null, 2);
   }
@@ -175,7 +183,7 @@ export class ConfigPage implements OnInit, OnDestroy {
   iniciar(): void {
     if (!this.puedeIniciar) return;
     this.busService.startSimulation();
-    this.router.navigate(['/panel']);
+    this.router.navigate(['/monitor']);
   }
 
   ngOnDestroy(): void { this.sub?.unsubscribe(); }
