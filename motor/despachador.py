@@ -33,6 +33,13 @@ from motor.colmena import (
     WaitForGraph,
     distancia_manhattan,
 )
+from motor.escorts import (
+    HORIZONTE_REPLANIFICACION,
+    Escort,
+    EscortPlanner,
+    StagnationDetector,
+    _es_excavacion,
+)
 from motor.politicas import POLITICAS
 
 if TYPE_CHECKING:
@@ -59,6 +66,11 @@ class Tarea:
     estacion: Estacion | None = field(default=None)  # estación de entrega (Feature 2)
     ticks_rotando: int = field(default=0)            # ticks ya girando (Feature 3)
     ticks_bloqueado_consecutivos: int = field(default=0)  # para reruta por bloqueo persistente
+    # --- Coordinación de escorts en excavación (anti-livelock @95%) ---
+    profundidad_inicial: int = field(default=-1)     # cajas sobre el objetivo al empezar a excavar (-1 = sin fijar)
+    ultimo_progreso_medido: int = field(default=0)   # progreso neto medido en el último tick
+    ticks_sin_progreso: int = field(default=0)       # alimenta el StagnationDetector
+    escort_asignado: Escort | None = field(default=None)  # columna-escort de descanso asignada
 
 
 # ------------------------------------------------------------------
@@ -91,6 +103,14 @@ class Despachador:
         self._espera_handoff: dict[int, int] = {}    # robot_id -> ticks esperando (aging)
         self.reservation_table = ReservationTable()
         self.wait_for_graph = WaitForGraph()
+
+        # --- Coordinación de celdas libres en excavación (anti-livelock) ---
+        self.escort_planner = EscortPlanner()
+        self.stagnation_detector = StagnationDetector()
+        # Columnas protegidas (objetivo) y reservadas (escort) del tick actual;
+        # refrescadas antes del Paso 3 y leídas por _fase_excavar.
+        self._cols_protegidas: set[tuple[int, int]] = set()
+        self._cols_reservadas: set[tuple[int, int]] = set()
 
     @property
     def usa_estaciones(self) -> bool:
@@ -252,6 +272,29 @@ class Despachador:
             ruta_ocupante.pop(0)
             acum.total_desplazamientos += 2
             robots_movidos_swap.update((robot.id, ocupante_id))
+
+        # Paso 2.9: Coordinación de escorts en excavación (anti-livelock @95%).
+        # Mide progreso neto y replanifica la asignación de columnas-escort por
+        # horizonte rodante o ante estancamiento, antes de avanzar a los robots.
+        tareas_excavacion = [t for t in self._tareas.values() if _es_excavacion(t)]
+        if tareas_excavacion:
+            self.stagnation_detector.actualizar(tareas_excavacion, self.grilla)
+            necesita_replan = (
+                self._tick_actual % HORIZONTE_REPLANIFICACION == 0
+                or self.stagnation_detector.hay_estancamiento(tareas_excavacion)
+                or any(t.escort_asignado is None for t in tareas_excavacion)
+            )
+            if necesita_replan:
+                self.escort_planner.planificar(self._tareas, self.grilla, self._tick_actual)
+        # Refrescar columnas protegidas/reservadas que leerá _fase_excavar.
+        self._cols_protegidas = {
+            (t.caja_objetivo.x, t.caja_objetivo.y)
+            for t in self._tareas.values() if _es_excavacion(t)
+        }
+        self._cols_reservadas = {
+            t.escort_asignado.columna
+            for t in self._tareas.values() if t.escort_asignado is not None
+        }
 
         # Paso 3: avanzar cada robot
         for robot in robots_estado.values():
@@ -444,75 +487,45 @@ class Despachador:
             tarea.fase = "recuperar"
             return self._fase_recuperar(robot, tarea, acum)
 
-        # Mover la caja más alta a una columna adyacente con espacio.
-        #
-        # Crítico: NO descargar en una columna que sea objetivo de otra tarea
-        # activa. Si dos robots excavan columnas adyacentes y cada uno tira sus
-        # cajas en la columna del otro, ninguna columna baja nunca (ping-pong
-        # infinito → pedidos nunca se completan). Excluir las columnas-objetivo
-        # garantiza que la columna que se excava SOLO pierde cajas → termina.
-        caja_mover = max(encima, key=lambda c: c.z)
-        columnas_objetivo = {
-            (t.caja_objetivo.x, t.caja_objetivo.y) for t in self._tareas.values()
-        }
-        adyacentes = self.grilla.columnas_adyacentes(caja_mover.x, caja_mover.y)
-        neutrales = [c for c in adyacentes if c not in columnas_objetivo]
-        # Preferir columnas neutrales; las objetivo solo como último recurso.
-        orden_adyacentes = neutrales + [c for c in adyacentes if c in columnas_objetivo]
-        for ax, ay in orden_adyacentes:
-            libres = self.grilla.celdas_libres_en_columna(ax, ay)
-            if not libres:
-                continue
-            z_libre = libres[0]
-            self.grilla.remover(caja_mover.x, caja_mover.y, caja_mover.z)
-            caja_nueva = Caja(
-                id_caja=caja_mover.id_caja,
-                id_sku=caja_mover.id_sku,
-                cantidad=caja_mover.cantidad,
-                x=ax, y=ay, z=z_libre,
-            )
-            self.grilla.agregar(caja_nueva)
-            acum.total_desplazamientos += 1
-            g_d = [caja_nueva]
-            g_r = [(caja_mover.x, caja_mover.y, caja_mover.z)]
+        # Coordinación de escorts (anti-livelock @95%): la columna de descanso la
+        # asigna el EscortPlanner (ver motor/escorts.py). Sin escort asignado este
+        # ciclo, el robot ESPERA — esto serializa las excavaciones que compiten por
+        # las pocas celdas libres y rompe el ciclo degenerativo. La caja siempre se
+        # deposita en una columna NO protegida (nunca se re-entierra otro objetivo).
+        if tarea.escort_asignado is None:
             nuevo = _cambiar_estado(robot, RobotEstado.EXCAVANDO)
-            ev = {"tipo": "excavacion", "robot_id": robot.id,
-                  "de": [caja_mover.x, caja_mover.y, caja_mover.z],
-                  "a": [ax, ay, z_libre]}
-            return nuevo, g_d, g_r, None, [ev]
+            return nuevo, [], [], None, [{
+                "tipo": "espera_escort", "robot_id": robot.id,
+                "columna": [tarea.caja_objetivo.x, tarea.caja_objetivo.y],
+            }]
 
-        # Adyacentes llenas: buscar en toda la grilla
-        gx, gy = self.grilla.config.grilla.x, self.grilla.config.grilla.y
-        for ax in range(gx):
-            for ay in range(gy):
-                if (ax, ay) == (caja_mover.x, caja_mover.y):
-                    continue
-                if (ax, ay) in self.grilla.columnas_adyacentes(caja_mover.x, caja_mover.y):
-                    continue  # ya lo intentamos arriba
-                libres = self.grilla.celdas_libres_en_columna(ax, ay)
-                if not libres:
-                    continue
-                z_libre = libres[0]
-                self.grilla.remover(caja_mover.x, caja_mover.y, caja_mover.z)
-                caja_nueva = Caja(
-                    id_caja=caja_mover.id_caja,
-                    id_sku=caja_mover.id_sku,
-                    cantidad=caja_mover.cantidad,
-                    x=ax, y=ay, z=z_libre,
-                )
-                self.grilla.agregar(caja_nueva)
-                acum.total_desplazamientos += 1
-                g_d = [caja_nueva]
-                g_r = [(caja_mover.x, caja_mover.y, caja_mover.z)]
-                nuevo = _cambiar_estado(robot, RobotEstado.EXCAVANDO)
-                ev = {"tipo": "excavacion", "robot_id": robot.id,
-                      "de": [caja_mover.x, caja_mover.y, caja_mover.z],
-                      "a": [ax, ay, z_libre]}
-                return nuevo, g_d, g_r, None, [ev]
+        caja_mover = max(encima, key=lambda c: c.z)
+        destino_cell = self.escort_planner.mover_escort_un_paso(
+            caja_mover, tarea, self.grilla,
+            self._cols_protegidas, self._cols_reservadas,
+        )
+        if destino_cell is None:
+            # Sin celda segura disponible este tick: esperar (se replanificará).
+            nuevo = _cambiar_estado(robot, RobotEstado.EXCAVANDO)
+            return nuevo, [], [], None, []
 
-        # Toda la grilla llena: esperar un tick
+        ax, ay, z_libre = destino_cell
+        self.grilla.remover(caja_mover.x, caja_mover.y, caja_mover.z)
+        caja_nueva = Caja(
+            id_caja=caja_mover.id_caja,
+            id_sku=caja_mover.id_sku,
+            cantidad=caja_mover.cantidad,
+            x=ax, y=ay, z=z_libre,
+        )
+        self.grilla.agregar(caja_nueva)
+        acum.total_desplazamientos += 1
+        g_d = [caja_nueva]
+        g_r = [(caja_mover.x, caja_mover.y, caja_mover.z)]
         nuevo = _cambiar_estado(robot, RobotEstado.EXCAVANDO)
-        return nuevo, [], [], None, []
+        ev = {"tipo": "excavacion", "robot_id": robot.id,
+              "de": [caja_mover.x, caja_mover.y, caja_mover.z],
+              "a": [ax, ay, z_libre]}
+        return nuevo, g_d, g_r, None, [ev]
 
     def _fase_recuperar(self, robot: Robot, tarea: Tarea, acum: "Acumuladores") -> _AvanceResult:
         # Verificar que la caja objetivo sigue en su lugar
