@@ -1,0 +1,5 @@
+{
+  "grilla": { "x": 12, "y": 10, "z": 5 },
+  "robots": 8,
+  "ocupacion_inicial": 95
+}
