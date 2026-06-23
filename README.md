@@ -1,73 +1,78 @@
-# Simulación AutoStore — Forus S.A. (Grupo 12)
+# Simulacion AutoStore — Forus S.A. (Grupo 12)
 
-Repositorio del simulador AutoStore. Remoto: `https://github.com/samirabsaa/Simulacion_AutoStore.git`
-
-## Estructura del proyecto
-
-```
-Simulacion_AutoStore/
-├── api/                  # Bridge FastAPI — endpoints REST + WebSocket
-├── bus_persistencia/     # Módulo Bus + Persistencia — T-01 a T-08
-├── motor/                # Módulo M2 — Motor de Simulación
-│   ├── simulador.py      # Orquestador central
-│   ├── grilla.py         # Grilla 3D de almacenamiento
-│   ├── despachador.py    # Despachador de robots
-│   ├── politicas.py      # Políticas FIFO y Prioridad
-│   ├── kpis.py           # Cálculo de los 7 KPIs
-│   ├── modos.py          # Turno diurno y nocturno
-│   └── run.py            # Standalone runner (CLI)
-├── m1/                   # Módulo M1 — Frontend Angular/Ionic
-├── tests/                # Tests del motor M2 (57 tests)
-├── data/                 # config.json, ola.csv, reposicion.csv
-├── docs/                 # Contrato API, guías de uso
-└── output/               # sesion_*.csv, metadata, reporte_comp (runtime)
-```
+Simulador funcional del sistema de almacenamiento automatizado AutoStore.
+Repositorio: `https://github.com/samirabsaa/Simulacion_AutoStore.git`
 
 ---
 
-## Levantar el sistema completo (M1 + M2)
+## Requisitos previos
 
-### Requisitos previos
-
-| Herramienta | Versión mínima | Verificar |
+| Herramienta | Version minima | Verificar con |
 |---|---|---|
-| Python | 3.9+ | `python3 --version` |
+| Python | 3.9+ | `python --version` o `python3 --version` |
+| pip | (incluido con Python) | `pip --version` |
 | Node.js | 18+ | `node --version` |
 | npm | 9+ | `npm --version` |
+| Git | cualquiera | `git --version` |
+
+> Node.js y npm solo son necesarios si vas a levantar el frontend (M1).
+> Para usar solo el motor o la API basta con Python.
 
 ---
 
-### Backend (M2 + bridge FastAPI)
-
-El backend expone la API REST y el WebSocket en `http://localhost:8000`.
-
-#### Instalación (primera vez)
+## 1. Clonar el repositorio
 
 ```bash
-# Desde la raíz del repo: Simulacion_AutoStore/
-python3 -m venv venv
-source venv/bin/activate          # Linux / macOS
-# venv\Scripts\activate           # Windows
+git clone https://github.com/samirabsaa/Simulacion_AutoStore.git
+cd Simulacion_AutoStore
+```
 
+---
+
+## 2. Backend (Python — motor + API)
+
+### 2.1 Crear entorno virtual
+
+**Linux / macOS:**
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+**Windows (CMD):**
+
+```cmd
+python -m venv venv
+venv\Scripts\activate.bat
+```
+
+**Windows (PowerShell):**
+
+```powershell
+python -m venv venv
+venv\Scripts\Activate.ps1
+```
+
+> Si PowerShell bloquea la activacion, ejecuta primero:
+> `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`
+
+### 2.2 Instalar dependencias
+
+```bash
 pip install -r requirements.txt
 ```
 
-#### Encender
+### 2.3 Levantar el servidor API
 
 ```bash
-# Desde Simulacion_AutoStore/ con el venv activo
-source venv/bin/activate
 uvicorn api.server:app --reload --port 8000
 ```
 
-El servidor queda corriendo en `http://localhost:8000`. La bandera `--reload`
-recarga automáticamente al guardar cambios en el código.
+El servidor queda disponible en `http://localhost:8000`.
+Para detenerlo presiona `Ctrl + C`.
 
-#### Apagar
-
-Presiona `Ctrl + C` en la terminal donde corre uvicorn.
-
-Para desactivar el entorno virtual:
+Para desactivar el entorno virtual despues de terminar:
 
 ```bash
 deactivate
@@ -75,64 +80,51 @@ deactivate
 
 ---
 
-### Frontend (M1 — Angular/Ionic)
+## 3. Frontend (M1 — Angular)
 
-El frontend corre en `http://localhost:8100` y se conecta automáticamente al
-backend en `localhost:8000`.
-
-#### Instalación (primera vez)
+### 3.1 Instalar dependencias (primera vez)
 
 ```bash
-cd m1/
+cd m1
 npm install
 ```
 
-#### Encender
+### 3.2 Levantar el servidor de desarrollo
 
 ```bash
-cd m1/
-npm start           # equivalente a: npx ionic serve
+cd m1
+npm start
 ```
 
-El navegador se abre solo en `http://localhost:8100`. El servidor recarga al
-guardar cambios en el código fuente.
+Se abre automaticamente en `http://localhost:8100` y se conecta al backend en `localhost:8000`.
+Para detenerlo presiona `Ctrl + C`.
 
-#### Apagar
-
-Presiona `Ctrl + C` en la terminal donde corre el servidor de desarrollo.
+> El frontend puede arrancar sin el backend — las llamadas HTTP/WS fallan en silencio
+> hasta que el backend este disponible.
 
 ---
 
-### Orden recomendado al trabajar
+## 4. Orden recomendado
 
-```
-1. Levantar backend  →  source venv/bin/activate && uvicorn api.server:app --reload --port 8000
-2. Levantar frontend →  cd m1/ && npm start
-3. Abrir navegador   →  http://localhost:8100
-4. Apagar frontend   →  Ctrl+C en la terminal del frontend
-5. Apagar backend    →  Ctrl+C en la terminal del backend, luego deactivate
-```
-
-> Si solo quieres probar la UI sin el backend, el frontend igual arranca y el
-> heatmap anima localmente. Las llamadas HTTP/WS fallan en silencio hasta que
-> el backend esté disponible.
+| Paso | Accion | Terminal |
+|------|--------|----------|
+| 1 | Activar venv e iniciar backend | Terminal 1 |
+| 2 | Iniciar frontend (`cd m1 && npm start`) | Terminal 2 |
+| 3 | Abrir `http://localhost:8100` en el navegador | — |
+| 4 | Detener frontend con `Ctrl + C` | Terminal 2 |
+| 5 | Detener backend con `Ctrl + C`, luego `deactivate` | Terminal 1 |
 
 ---
 
-## Requisitos previos (solo backend, sin frontend)
+## 5. Ejecutar simulacion standalone (sin frontend)
 
-- Python 3.9+
-- `pip install -r requirements.txt`
-
-No requiere NVIDIA Omniverse, GPU, ni interfaz gráfica.
-
-## Ejecutar una simulación (standalone)
+No requiere Node.js, GPU ni Omniverse. Solo Python con las dependencias instaladas.
 
 ```bash
 # FIFO (predeterminado)
 python -m motor.run --policy fifo --ticks 100
 
-# Prioridad por Posición
+# Prioridad por posicion
 python -m motor.run --policy prioridad_posicion --ticks 200 --seed 42
 
 # Demo comparativa P09 (FIFO vs Prioridad + reporte)
@@ -142,39 +134,25 @@ python -m motor.run --compare --ticks 100
 python -m motor.run --policy fifo --ticks 50 --quiet
 ```
 
-Documentación:
-- [docs/guia_uso_m2.md](docs/guia_uso_m2.md) — guía completa de uso y tests
-- [docs/bus_api.md](docs/bus_api.md) — contrato para M1, M2, M3
-- [docs/integracion_grupo12.md](docs/integracion_grupo12.md) — diagrama de integración
+---
 
-## Ejecutar todos los tests
+## 6. Ejecutar tests
 
 ```bash
-# Todos los tests (motor + bus)
+# Todos (motor + bus)
 python -m pytest tests/ bus_persistencia/tests/ -v
-```
 
-**88 tests total:** 57 tests del motor M2 + 31 tests del bus/persistencia.
-
-### Solo motor M2
-
-```bash
+# Solo motor M2
 python -m pytest tests/ -v
-```
 
-### Solo bus + persistencia
-
-```bash
+# Solo bus + persistencia
 python -m pytest bus_persistencia/tests/ -v
-```
 
-### Solo demo P09 (para evaluación)
-
-```bash
+# Solo demo P09
 python -m pytest tests/test_p09_demo.py -v
 ```
 
-### Demo de integración (mock M1/M2/M3)
+### Demo de integracion (mock M1/M2/M3)
 
 ```bash
 python -m bus_persistencia.integration
@@ -182,32 +160,43 @@ python -m bus_persistencia.integration
 
 ---
 
-## Módulo Bus + Persistencia
+## Estructura del proyecto
 
-```python
-from bus_persistencia import StateBus
-from bus_persistencia.persistence import load_config, load_ola
-from bus_persistencia.bus.state_bus import M2_WRITER_ID
-from bus_persistencia.models.state import TickDelta, KPISet
-
-bus = StateBus()
-config = load_config("data/config.json")
-if config.is_valid:
-    bus.set_config(config.data)
-
-snap = bus.read_snapshot()
-bus.write_tick_delta(M2_WRITER_ID, TickDelta(kpis=KPISet(TSP=95.0)))
+```
+Simulacion_AutoStore/
+├── api/                  # Bridge FastAPI — endpoints REST + WebSocket
+├── bus_persistencia/     # Bus de Estado + Persistencia
+├── motor/                # Motor de Simulacion (M2)
+│   ├── simulador.py      # Orquestador central
+│   ├── grilla.py         # Grilla 3D de almacenamiento
+│   ├── despachador.py    # Despachador de robots
+│   ├── politicas.py      # Politicas FIFO y Prioridad
+│   ├── kpis.py           # Calculo de los 7 KPIs
+│   ├── modos.py          # Turno diurno y nocturno
+│   └── run.py            # Runner standalone (CLI)
+├── m1/                   # Frontend Angular
+├── tests/                # Tests del motor M2
+├── data/                 # config.json, ola.csv, reposicion.csv
+├── docs/                 # Documentacion tecnica
+└── output/               # Archivos generados en runtime
 ```
 
-## Tareas Bus + Persistencia
+---
 
-| ID | Descripción |
-|----|-------------|
-| T-01 | Bus de Estado Central |
-| T-02 | Single-writer / multiple-reader + Lock |
-| T-03 | config.json |
-| T-04 | ola.csv |
-| T-05 | reposicion.csv |
-| T-06 | sesion_X.csv (buffer diferido) |
-| T-07 | reporte_comp.csv |
-| T-08 | Reproducibilidad (semilla) |
+## Documentacion adicional
+
+- [docs/guia_uso_m2.md](docs/guia_uso_m2.md) — guia completa de uso y tests
+- [docs/bus_api.md](docs/bus_api.md) — contrato del bus para M1, M2, M3
+- [docs/integracion_grupo12.md](docs/integracion_grupo12.md) — diagrama de integracion
+
+---
+
+## Problemas comunes
+
+| Problema | Solucion |
+|----------|----------|
+| `python` no encontrado en Linux | Usar `python3` en su lugar |
+| PowerShell bloquea `Activate.ps1` | `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` |
+| `npm start` falla en m1 | Verificar Node.js 18+ y ejecutar `npm install` primero |
+| Puerto 8000 u 8100 ocupado | Cerrar el proceso que usa el puerto o elegir otro con `--port` |
+| `ModuleNotFoundError` al correr el motor | Asegurarse de estar en la raiz del repo con el venv activo |
