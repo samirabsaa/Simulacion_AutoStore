@@ -16,6 +16,7 @@ from bus_persistencia.bus.state_bus import StateBus
 from bus_persistencia.models.state import Caja, Config, ModoTurno, Pedido
 from motor.simulador import AutoStoreSimulator
 from motor.run import generar_ola_aleatoria, _asegurar_cajas_para_skus
+from api.serializers import snapshot_to_m3_frame
 
 # ticks/seg declarados por M1 (1x, 2x, 5x) -> intervalo de sleep entre ticks
 VELOCIDAD_INTERVALOS: dict[int, float] = {1: 1.0, 2: 0.5, 5: 0.2}
@@ -48,6 +49,8 @@ class SimulationLoop:
         # KPIs finales de las ejecuciones terminadas (para el reporte comparativo).
         # Cada entrada: (nombre_ejecucion, {KPI: valor}).
         self.finished_runs: list[tuple[str, dict[str, float]]] = []
+        # Timeline completa para exportación M3 (Omniverse)
+        self._m3_timeline: list[dict] = []
 
     @property
     def simulador(self) -> AutoStoreSimulator | None:
@@ -145,6 +148,7 @@ class SimulationLoop:
         _asegurar_cajas_para_skus(self._sim)
         # Reaplicar la cola de reposición (nocturno) al simulador recreado.
         self._sim.cola_reposicion = list(self._reposicion_inicial)
+        self._m3_timeline = []
         self.status = "IDLE"
         self._on_tick()
 
@@ -163,6 +167,10 @@ class SimulationLoop:
                 self._on_tick()
                 break
             self._sim.avanzar_tick()
+            snap = self.bus.read_snapshot()
+            self._m3_timeline.append(
+                snapshot_to_m3_frame(snap, self._sim.last_tick_eventos)
+            )
             self._on_tick()
             time.sleep(VELOCIDAD_INTERVALOS.get(self.velocidad, 1.0))
 
@@ -173,3 +181,24 @@ class SimulationLoop:
         self.finished_runs.append((self._session_name, kpis))
         if len(self.finished_runs) > 5:
             self.finished_runs = self.finished_runs[-5:]
+
+    def get_m3_export(self) -> dict:
+        """Construye el JSON completo para M3 (Omniverse): config + timeline."""
+        snap = self.bus.read_snapshot()
+        config_data: dict = {}
+        if snap.config is not None:
+            from motor.grilla import Grilla
+            g = Grilla(snap.config)
+            config_data = {
+                "grilla": {"x": snap.config.grilla.x, "y": snap.config.grilla.y, "z": snap.config.grilla.z},
+                "robots": snap.config.robots,
+                "ocupacion_inicial": snap.config.ocupacion_inicial,
+                "gridTotal": {"x": g.ancho_total, "y": g.alto_total},
+                "interior": dict(zip(("x0", "y0", "x1", "y1"), g.interior_bounds)),
+                "estaciones": [
+                    {"id": e.id, "x": e.x, "y": e.y, "orientacion": e.orientacion_requerida.value}
+                    for e in g.estaciones
+                ],
+                "conveyorsNorte": [{"x": c.x, "y": c.y} for c in g.conveyors_norte],
+            }
+        return {"config": config_data, "timeline": self._m3_timeline}

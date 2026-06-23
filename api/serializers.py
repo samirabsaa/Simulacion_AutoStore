@@ -76,6 +76,25 @@ def pedido_to_dict(pedido: Pedido) -> dict[str, Any]:
     return asdict(pedido)
 
 
+def robot_to_m3_dict(robot: Robot) -> dict[str, Any]:
+    data = asdict(robot)
+    data["estado"] = robot.estado.value
+    if "orientacion" in data and hasattr(data["orientacion"], "value"):
+        data["orientacion"] = data["orientacion"].value
+    return data
+
+
+def snapshot_to_m3_frame(snapshot: StateSnapshot, eventos: list[dict]) -> dict[str, Any]:
+    return {
+        "tick": snapshot.tick,
+        "modo": snapshot.modo.value,
+        "robots": [robot_to_m3_dict(r) for r in snapshot.robots],
+        "grilla": [caja_to_dict(c) for c in snapshot.grilla],
+        "eventos": eventos,
+        "kpis": snapshot.kpis.as_dict(),
+    }
+
+
 def snapshot_to_payload(snapshot: StateSnapshot, status: str, velocidad: int) -> dict[str, Any]:
     """Construye el payload `{type: 'tick', ...}` que espera `ws/state`.
 

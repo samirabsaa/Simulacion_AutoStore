@@ -33,6 +33,17 @@
           ⬇ Exportar sesión
         </button>
       </div>
+
+      <div style="padding:20px;background:var(--surface-app);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-weight:600;font-size:15px">Exportar para M3 (Omniverse)</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">export_m3.json</div>
+        </div>
+        <button style="padding:8px 18px;background:var(--surface-card);color:var(--text-primary);border:1px solid var(--border-card);border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer"
+                (click)="exportM3()">
+          ⬇ Descargar JSON
+        </button>
+      </div>
     </div>
   </div>
 </div>

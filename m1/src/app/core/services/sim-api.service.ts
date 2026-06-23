@@ -59,4 +59,14 @@ export class SimApiService {
   exportSesion(): void {
     window.open(`${environment.apiUrl}/report/sesion`, '_blank');
   }
+
+  exportM3(): void {
+    window.open(`${environment.apiUrl}/report/m3`, '_blank');
+  }
+
+  getReportStatus(): Observable<{ finished_runs: number; needed_for_comparativo: number }> {
+    return this.http.get<{ finished_runs: number; needed_for_comparativo: number }>(
+      `${environment.apiUrl}/report/status`
+    );
+  }
 }
