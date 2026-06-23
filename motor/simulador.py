@@ -26,6 +26,7 @@ from bus_persistencia.models.state import (
     Robot,
     RobotEstado,
     TickDelta,
+    celdas_desde,
 )
 from motor.grilla import Grilla
 from motor.kpis import Acumuladores
@@ -106,15 +107,38 @@ class AutoStoreSimulator:
         self._grilla = Grilla(config)
         self._grilla.inicializar_aleatoria(seed=seed)
 
-        # Construir robots en estado INACTIVO en posiciones arbitrarias del borde
-        puertos = self._grilla.puertos
-        for i in range(config.robots):
-            px, py = puertos[i % len(puertos)]
-            self.robots[i] = Robot(
-                id=i, x=px, y=py, z=0,
-                estado=RobotEstado.INACTIVO,
-                carga_id=None,
-            )
+        # Construir robots 1×2 con orientación fija en el anillo de tránsito.
+        # Cada robot ocupa cuerpo (ancla) + punta (derivada de su orientación);
+        # se colocan sin solapar footprints.
+        orientaciones = config.orientaciones_robots()
+        ocupadas: set[tuple[int, int]] = set()
+        candidatos = self._grilla.anillo  # celdas-ancla candidatas (orden estable)
+        for i, ori in enumerate(orientaciones):
+            colocado = False
+            for (cx, cy) in candidatos:
+                celdas = celdas_desde(cx, cy, ori)
+                if any(not self._grilla.en_superficie(x, y) for x, y in celdas):
+                    continue
+                if any((x, y) in ocupadas for x, y in celdas):
+                    continue
+                self.robots[i] = Robot(
+                    id=i, x=cx, y=cy, z=0,
+                    estado=RobotEstado.INACTIVO,
+                    carga_id=None,
+                    orientacion=ori,
+                )
+                ocupadas.update(celdas)
+                colocado = True
+                break
+            if not colocado:
+                # Fallback defensivo: ubicar en la primera celda libre del anillo.
+                cx, cy = candidatos[i % len(candidatos)]
+                self.robots[i] = Robot(
+                    id=i, x=cx, y=cy, z=0,
+                    estado=RobotEstado.INACTIVO,
+                    carga_id=None,
+                    orientacion=ori,
+                )
 
         # Leer pedidos y cola de reposición que M1 ya cargó en el bus
         self.pedidos_cola = list(snap.pedidos.cola)

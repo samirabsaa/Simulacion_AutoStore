@@ -93,6 +93,27 @@ class Config:
     # --- Extensiones M3 (opcionales — default preserva comportamiento previo) ---
     anillo_transito: bool = False          # anillo perimetral solo-tránsito (sin cajas)
     estaciones: tuple[Estacion, ...] = ()  # estaciones Cinta/Carrusel; () = sin restricción
+    # --- Robots 1×2 con orientación fija (configurable por el operador) ---
+    # Cuántos robots de cada orientación. Si los tres son 0, se reparte `robots`
+    # de forma equilibrada entre N/E/O (retrocompatibilidad).
+    robots_norte: int = 0
+    robots_este: int = 0
+    robots_oeste: int = 0
+
+    def orientaciones_robots(self) -> list[Orientacion]:
+        """Lista de orientaciones, una por robot, en orden de id.
+
+        Usa los conteos explícitos N/E/O si alguno es > 0; si no, reparte el total
+        `robots` de forma equilibrada (N, E, O, N, E, O, ...)."""
+        n, e, o = self.robots_norte, self.robots_este, self.robots_oeste
+        if n or e or o:
+            return (
+                [Orientacion.NORTE] * n
+                + [Orientacion.ESTE] * e
+                + [Orientacion.OESTE] * o
+            )
+        ciclo = (Orientacion.NORTE, Orientacion.ESTE, Orientacion.OESTE)
+        return [ciclo[i % 3] for i in range(self.robots)]
 
 
 SimConfig = Config
@@ -117,6 +138,40 @@ class Robot:
     estado: RobotEstado
     carga_id: str | None = None
     orientacion: Orientacion = Orientacion.NORTE
+
+
+# Desplazamiento (dx, dy) de la punta respecto al cuerpo (x, y) según orientación.
+# La punta es la celda donde el robot excava/pickea y transporta la caja. El robot
+# nunca rota: su orientación se fija al crearse y el footprint se traslada rígido.
+_PUNTA_OFFSET: dict[Orientacion, tuple[int, int]] = {
+    Orientacion.NORTE: (0, 1),   # punta en (x, y+1)
+    Orientacion.ESTE: (1, 0),    # punta en (x+1, y)
+    Orientacion.OESTE: (-1, 0),  # punta en (x-1, y)
+}
+
+
+def punta(robot: Robot) -> tuple[int, int]:
+    """Celda XY de la punta del robot 1×2, derivada de su orientación."""
+    dx, dy = _PUNTA_OFFSET[robot.orientacion]
+    return (robot.x + dx, robot.y + dy)
+
+
+def celdas_robot(robot: Robot) -> list[tuple[int, int]]:
+    """Las dos celdas XY que ocupa un robot 1×2: cuerpo (ancla) y punta."""
+    return [(robot.x, robot.y), punta(robot)]
+
+
+def punta_desde(x: int, y: int, orientacion: Orientacion) -> tuple[int, int]:
+    """Punta de un robot 1×2 con cuerpo en (x, y) y la orientación dada.
+
+    Útil para evaluar destinos hipotéticos sin construir un Robot."""
+    dx, dy = _PUNTA_OFFSET[orientacion]
+    return (x + dx, y + dy)
+
+
+def celdas_desde(x: int, y: int, orientacion: Orientacion) -> list[tuple[int, int]]:
+    """Las dos celdas que ocuparía un robot 1×2 con cuerpo en (x, y) y orientación dada."""
+    return [(x, y), punta_desde(x, y, orientacion)]
 
 
 @dataclass(frozen=True)
