@@ -33,7 +33,7 @@ def procesar_diurno(
     despachador,           # motor.despachador.Despachador
     robots: dict[int, Robot],
     pedidos_cola: list[Pedido],
-    politica: PoliticaPicking,
+    politica: str,
     acum: Acumuladores,
 ) -> tuple[list[Robot], list[Caja], list[tuple], list[Pedido], list[dict]]:
     """Delega el turno diurno al despachador central.

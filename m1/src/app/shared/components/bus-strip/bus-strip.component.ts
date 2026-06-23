@@ -25,7 +25,7 @@ export class BusStripComponent {
 
   get grillaLabel(): string {
     const g = this.bus?.grid;
-    return g ? `${g.x}×${g.y}×${g.z}` : '—';
+    return g ? `${g.x}×${g.y}×${g.z}` : '-';
   }
 
   get isDiurno(): boolean {

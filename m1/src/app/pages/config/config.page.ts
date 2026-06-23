@@ -1,16 +1,17 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { BusClientService, BusState, FORUS_DEFAULTS } from '../../core/services/bus-client.service';
 import { SimApiService } from '../../core/services/sim-api.service';
 import { SimMode, PickingPolicy } from '../../core/enums/sim.enums';
 import { FileLoaderComponent } from '../../shared/components/file-loader/file-loader.component';
+import { PolicySelectorComponent } from '../../shared/components/policy-selector/policy-selector.component';
 
 @Component({
   selector: 'app-config',
   templateUrl: './config.page.html',
   styleUrls: ['./config.page.scss'],
-  imports: [FileLoaderComponent],
+  imports: [FileLoaderComponent, PolicySelectorComponent],
 })
 export class ConfigPage implements OnInit, OnDestroy {
   bus: BusState | null = null;
@@ -18,6 +19,10 @@ export class ConfigPage implements OnInit, OnDestroy {
 
   readonly SimMode       = SimMode;
   readonly PickingPolicy = PickingPolicy;
+
+  customPolicies: { name: string; label: string }[] = [];
+  policyUploadEstado: 'ok' | 'error' | null = null;
+  policyUploadMsg = '';
 
   private csvErrorsByField: Record<'archivoOla' | 'archivoReposicion', string[]> = {
     archivoOla: [],
@@ -64,6 +69,55 @@ export class ConfigPage implements OnInit, OnDestroy {
 
   setMode(m: SimMode)       { this.busService.setMode(m); }
   restaurarForus()           { this.busService.restaurarForus(); }
+
+  onPolicyChange(policy: string): void {
+    this.busService.setPolicy(policy);
+  }
+
+  @ViewChild('policyInput') policyInputRef!: ElementRef<HTMLInputElement>;
+
+  onLoadExternal(): void {
+    this.policyInputRef?.nativeElement?.click();
+  }
+
+  onPolicyFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    this.policyUploadEstado = null;
+    this.policyUploadMsg = '';
+
+    this.simApi.uploadPolicy(file).subscribe({
+      next: (res) => {
+        const label = this.parseFileName(file.name);
+        this.policyUploadEstado = 'ok';
+        this.policyUploadMsg = `Política ${file.name} ha sido correctamente cargada`;
+        const name = res.policy_name;
+        if (!this.customPolicies.some(p => p.name === name)) {
+          this.customPolicies.push({ name, label });
+        }
+        this.busService.setPolicy(name);
+      },
+      error: (err) => {
+        this.policyUploadEstado = 'error';
+        this.policyUploadMsg = err.error?.detail ?? 'Error al cargar la política';
+      },
+    });
+    input.value = '';
+  }
+
+  private parseFileName(filename: string): string {
+    return filename
+      .replace(/\.py$/i, '')
+      .replace(/[_\-]/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .split(' ')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  }
 
   // ── Carga real de CSV (T-29) ────────────────────────────────────────────
   onCsvFileSelected(event: Event): void {
@@ -163,7 +217,7 @@ export class ConfigPage implements OnInit, OnDestroy {
       modo_turno: b.mode === SimMode.DIURNO ? 'diurno_picking' : 'nocturno_reposicion',
       archivo_datos: this.csvFileNameByField[this.csvCampo] || this.csvArchivoNombre,
       estado_archivo: this.csvEstado,
-      politica_picking: b.policy === PickingPolicy.FIFO ? 'fifo' : 'prioridad_posicion',
+      politica_picking: b.policy.toLowerCase(),
       pedidos_demandados: b.pedidosDemandados,
       velocidad: `${b.velocidad}x`,
     }, null, 2);

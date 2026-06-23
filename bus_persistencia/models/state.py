@@ -242,7 +242,7 @@ class StateSnapshot:
 
     tick: int
     modo: ModoTurno
-    politica: PoliticaPicking
+    politica: str
     grilla: tuple[Caja, ...]
     robots: tuple[Robot, ...]
     pedidos: PedidosState
@@ -275,7 +275,7 @@ class MutableState:
 
     tick: int = 0
     modo: ModoTurno = ModoTurno.DIURNO
-    politica: PoliticaPicking = PoliticaPicking.FIFO
+    politica: str = "fifo"
     config: Config | None = None
     paused: bool = False
     nombre_ejecucion: str = ""

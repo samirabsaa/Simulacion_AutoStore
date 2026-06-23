@@ -28,7 +28,7 @@ export class KpiSidebarComponent {
   }
 
   displayValue(def: KpiDef): string {
-    return this.isActive(def) ? fmtKpi(def.id, this.val(def)) : '—';
+    return this.isActive(def) ? fmtKpi(def.id, this.val(def)) : '-';
   }
 
   status(def: KpiDef): 'ok' | 'warn' | 'bad' | 'info' {

@@ -79,5 +79,5 @@ export class KpiPanelComponent {
   get status(): KpiStatus { return kpiStatus(this.def, this.value, this.active); }
   get statusLabel(): string { return STATUS_LABEL[this.status]; }
   get statusColor(): string { return STATUS_COLOR[this.status]; }
-  get displayValue(): string { return this.active ? fmtKpi(this.def.id, this.value) : '—'; }
+  get displayValue(): string { return this.active ? fmtKpi(this.def.id, this.value) : '-'; }
 }

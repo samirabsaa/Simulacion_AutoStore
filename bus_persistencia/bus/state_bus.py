@@ -47,7 +47,7 @@ class StateBus:
         )
         self._tick = 0
         self._modo = ModoTurno.DIURNO
-        self._politica = PoliticaPicking.FIFO
+        self._politica: str = "fifo"
         self._grilla: list[Caja] = []
         self._robots: list[Robot] = []
         self._pedidos_cola: list[Pedido] = []
@@ -57,6 +57,14 @@ class StateBus:
         self._paused = False
         self._snapshot = self._build_snapshot()
         self._write_latencies_ms: list[float] = []
+
+    def set_session_output(self, output_dir, session_name: str) -> None:
+        """Dirige la bitácora de sesión a `output_dir/sesion_<session_name>.csv`.
+        Permite que `GET /report/sesion` encuentre el archivo (por defecto el bus
+        escribe a `_noop/`, no exportable). Resetea el buffer/header para la corrida."""
+        with self._lock:
+            self._session_logger.reset()
+            self._session_logger.configure(output_dir, session_name)
 
     def set_config(self, config: Config) -> None:
         with self._lock:
@@ -68,7 +76,7 @@ class StateBus:
             self._modo = modo
             self._refresh_snapshot()
 
-    def set_policy(self, politica: PoliticaPicking) -> None:
+    def set_policy(self, politica: str) -> None:
         with self._lock:
             self._politica = politica
             self._refresh_snapshot()
@@ -83,7 +91,7 @@ class StateBus:
         return {
             "tick": snap.tick,
             "modo": snap.modo.value,
-            "politica": snap.politica.value,
+            "politica": snap.politica,
             "kpis": snap.kpis.as_dict(),
             "paused": snap.paused,
         }
@@ -119,7 +127,7 @@ class StateBus:
         with self._lock:
             self._tick = 0
             self._modo = ModoTurno.DIURNO
-            self._politica = PoliticaPicking.FIFO
+            self._politica = "fifo"
             self._grilla = []
             self._robots = []
             self._pedidos_cola = []

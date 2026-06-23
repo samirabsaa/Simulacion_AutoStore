@@ -35,7 +35,7 @@ export interface BusState {
   running: boolean;
   velocidad: 1 | 2 | 5;
   mode: SimMode;
-  policy: PickingPolicy;
+  policy: string;
   semilla: number;
   grid: { x: number; y: number; z: number };
   numRobots: number;
@@ -165,7 +165,7 @@ export class BusClientService implements OnDestroy {
       status:    msg.status as SimStatus,
       velocidad: (msg.velocidad as 1 | 2 | 5) ?? s.velocidad,
       mode:      (msg.mode as SimMode)         ?? s.mode,
-      policy:    (msg.policy as PickingPolicy) ?? s.policy,
+      policy:    (msg.policy as string) ?? s.policy,
       grid,
       // El bridge devuelve `robots: []` antes de que M1 envíe /config (aún no
       // hay simulación configurada) — no pisar el valor local con 0 en ese caso.
@@ -216,7 +216,7 @@ export class BusClientService implements OnDestroy {
     this.simApi.sendConfig(this.buildConfig()).subscribe({ error: () => {} });
   }
 
-  setPolicy(policy: PickingPolicy): void {
+  setPolicy(policy: string): void {
     this.patchLocal({ policy });
     this.simApi.setPolicy(policy).subscribe({ error: () => {} });
   }
