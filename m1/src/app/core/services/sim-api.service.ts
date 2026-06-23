@@ -34,6 +34,10 @@ export class SimApiService {
     return this.http.post<{ ok: boolean; velocidad?: number }>(`${environment.apiUrl}/control/speed`, { velocidad: s });
   }
 
+  loadDemoOla(name: string): Observable<ValidationResultDTO> {
+    return this.http.post<ValidationResultDTO>(`${environment.apiUrl}/demo/load-ola`, null, { params: { name } });
+  }
+
   uploadCsv(file: File, tipo: 'ola' | 'reposicion'): Observable<ValidationResultDTO> {
     const form = new FormData();
     form.append('file', file);

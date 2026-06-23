@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { BusClientService, BusState, FORUS_DEFAULTS } from '../../core/services/bus-client.service';
+import { BusClientService, BusState, FORUS_DEFAULTS, DEMO1_CONFIG, DEMO2_CONFIG } from '../../core/services/bus-client.service';
 import { SimApiService } from '../../core/services/sim-api.service';
 import { SimMode, PickingPolicy } from '../../core/enums/sim.enums';
 import { FileLoaderComponent } from '../../shared/components/file-loader/file-loader.component';
@@ -14,6 +14,7 @@ import { FileLoaderComponent } from '../../shared/components/file-loader/file-lo
 })
 export class ConfigPage implements OnInit, OnDestroy {
   bus: BusState | null = null;
+  demoCargado: 'demo1' | 'demo2' | null = null;
   private sub!: Subscription;
 
   readonly SimMode       = SimMode;
@@ -62,8 +63,14 @@ export class ConfigPage implements OnInit, OnDestroy {
   setSemilla(e: Event) { this.busService.setField({ semilla: +(<HTMLInputElement>e.target).value || 0 }); }
   randomSemilla()      { this.busService.setField({ semilla: Math.floor(Math.random() * 9e7) + 1e7 }); }
 
-  setMode(m: SimMode)       { this.busService.setMode(m); }
-  restaurarForus()           { this.busService.restaurarForus(); }
+  setMode(m: SimMode)        { this.busService.setMode(m); }
+  restaurarForus()            { this.busService.restaurarForus(); }
+
+  readonly DEMO1 = DEMO1_CONFIG;
+  readonly DEMO2 = DEMO2_CONFIG;
+
+  cargarDemo1() { this.demoCargado = 'demo1'; this.csvFileNameByField.archivoOla = 'ola_demo1.csv'; this.busService.cargarDemo(DEMO1_CONFIG); }
+  cargarDemo2() { this.demoCargado = 'demo2'; this.csvFileNameByField.archivoOla = 'ola_demo2.csv'; this.busService.cargarDemo(DEMO2_CONFIG); }
 
   // ── Carga real de CSV (T-29) ────────────────────────────────────────────
   onCsvFileSelected(event: Event): void {
@@ -112,7 +119,8 @@ export class ConfigPage implements OnInit, OnDestroy {
   }
 
   get csvArchivoNombre(): string {
-    return this.csvTipo === 'ola' ? 'ola.csv' : 'reposicion.csv';
+    const nombreReal = this.csvFileNameByField[this.csvCampo];
+    return nombreReal || (this.csvTipo === 'ola' ? 'ola.csv' : 'reposicion.csv');
   }
 
   // ── Computed ────────────────────────────────────────────────────────────
@@ -175,6 +183,41 @@ export class ConfigPage implements OnInit, OnDestroy {
   goHeadless(): void { this.busService.setField({ falloSistema: null, omniverse: 'headless' }); }
 
   // ── Start ────────────────────────────────────────────────────────────────
+  onCargarConfig(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      input.value = '';
+      try {
+        const json = JSON.parse(reader.result as string);
+        if (typeof json.x !== 'number' || typeof json.y !== 'number' || typeof json.z !== 'number'
+            || typeof json.robots !== 'number' || typeof json.ocupacion !== 'number') {
+          alert('El archivo debe contener x, y, z, robots y ocupacion.');
+          return;
+        }
+        const s = this.busService.state;
+        this.busService.applyConfig({
+          x: json.x, y: json.y, z: json.z,
+          numRobots: json.robots,
+          occupancyPct: Math.round(json.ocupacion * 100),
+          mode: s.mode,
+          policy: s.policy,
+          sessionName: s.nombreEjecucion,
+          semilla: s.semilla,
+          pedidosDemandados: s.pedidosDemandados,
+          robotsNorte: s.robotsNorte,
+          robotsEste: s.robotsEste,
+          robotsOeste: s.robotsOeste,
+        });
+      } catch {
+        alert('El archivo no es un JSON válido.');
+      }
+    };
+    reader.readAsText(file);
+  }
+
   guardarConfig(): void {
     const s = this.busService.state;
     const data = {

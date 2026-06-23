@@ -11,6 +11,10 @@
       <button class="cfg__btn-secondary" (click)="guardarConfig()" title="Guardar config.json">
         💾 Guardar config.json
       </button>
+      <input type="file" #configFile accept=".json" (change)="onCargarConfig($event)" style="display:none">
+      <button class="cfg__btn-secondary" (click)="configFile.click()" title="Cargar config.json guardado">
+        📂 Cargar config.json
+      </button>
       <button class="cfg__btn-primary"
               [class.cfg__btn-primary--disabled]="!puedeIniciar"
               [disabled]="!puedeIniciar"
@@ -155,6 +159,36 @@
             <span class="cfg__metric-val mono">{{ capacidad.toLocaleString('es-CL') }}</span>
           </div>
         </div>
+      </div>
+
+      <!-- Demostradores P09 -->
+      <div class="as-card cfg__card">
+        <span class="cfg__card-title">Demostradores P09</span>
+        <p class="cfg__field-hint" style="margin:0">Carga parámetros y ola predefinidos para cada demostrador.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:4px">
+          <button class="cfg__btn-secondary cfg__btn-sm" (click)="cargarDemo1()">
+            ▶ Demo 1 · FIFO 75%
+          </button>
+          <button class="cfg__btn-secondary cfg__btn-sm" (click)="cargarDemo2()">
+            ▶ Demo 2 · Prioridad 90%
+          </button>
+        </div>
+
+        @if (demoCargado === 'demo1') {
+          <div class="cfg__demo-info">
+            <b>Demo 1: FIFO 75%</b><br>
+            Usa el método "primero en llegar, primero en salir" con una ocupación moderada del almacén.<br>
+            Simula 30 pedidos en una cuadrícula de 12x10 con 5 niveles.<br>
+            Haz clic en <b>Iniciar Simulación</b> (arriba a la derecha) para ejecutar.
+          </div>
+        } @else if (demoCargado === 'demo2') {
+          <div class="cfg__demo-info">
+            <b>Demo 2: Prioridad 90%</b><br>
+            Usa el método "prioridad por posición" con el almacén casi lleno.<br>
+            Simula 40 pedidos en la misma cuadrícula.<br>
+            Haz clic en <b>Iniciar Simulación</b> (arriba a la derecha) para ejecutar.
+          </div>
+        }
       </div>
 
     </div><!-- /RIGHT -->

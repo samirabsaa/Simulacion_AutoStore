@@ -37,6 +37,7 @@ bus = StateBus()
 _websockets: set[WebSocket] = set()
 _main_loop: asyncio.AbstractEventLoop | None = None
 OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output"
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 
 def _broadcast() -> None:
@@ -214,6 +215,18 @@ async def upload_reposicion(file: UploadFile) -> dict[str, Any]:
         tmp_path.unlink(missing_ok=True)
     if result.is_valid:
         loop.set_cola_reposicion(result.data)
+    return _validation_to_dto(result)
+
+
+@app.post("/demo/load-ola")
+def demo_load_ola(name: str) -> dict[str, Any]:
+    """Carga una ola de demostración desde data/ola_{name}.csv al bus."""
+    ola_path = DATA_DIR / f"ola_{name}.csv"
+    if not ola_path.exists():
+        raise HTTPException(status_code=404, detail=f"Demo file not found: ola_{name}.csv")
+    result = load_ola(ola_path)
+    if result.is_valid:
+        bus.set_pedidos_cola(result.data)
     return _validation_to_dto(result)
 
 
