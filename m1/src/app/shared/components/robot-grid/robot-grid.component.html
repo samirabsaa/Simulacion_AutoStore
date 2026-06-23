@@ -31,7 +31,7 @@
              [class.occ-heatmap__robot--depositing]="rb.estado === 'DEPOSITING'"
              [style.grid-column]="rb.gridCol"
              [style.grid-row]="rb.gridRow"
-             [title]="'R' + rb.id + ' · ' + rb.estado + ' · orientación ' + rb.ori">
+             [title]="'R' + rb.id + ' - ' + rb.estado + ' - orientacion ' + rb.ori">
           <span class="occ-heatmap__robot-id">R{{ rb.id }}</span>
           <span class="occ-heatmap__robot-state">{{ rb.icon }}</span>
         </div>
@@ -50,7 +50,7 @@
   </div>
 
   <div class="occ-heatmap__legend occ-heatmap__legend--robots">
-    <span class="occ-heatmap__legend-heading">Robots 1×2 (orientación fija · la punta excava/entrega)</span>
+    <span class="occ-heatmap__legend-heading">Robots 1x2 (orientacion fija, la punta excava/entrega)</span>
     @for (s of stateLegend; track s.mod) {
       <div class="occ-heatmap__legend-item">
         <span class="occ-heatmap__legend-dot occ-heatmap__legend-dot--{{ s.mod }}"></span>
@@ -59,7 +59,7 @@
     }
     <div class="occ-heatmap__legend-item">
       <span class="occ-heatmap__legend-swatch occ-heatmap__legend-swatch--ring"></span>
-      <span>Corredor de tránsito (E·T·A)</span>
+      <span>Corredor de transito (ETA)</span>
     </div>
     <div class="occ-heatmap__legend-item">
       <span class="occ-heatmap__legend-swatch occ-heatmap__legend-swatch--station">E/O</span>

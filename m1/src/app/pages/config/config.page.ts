@@ -152,7 +152,7 @@ export class ConfigPage implements OnInit, OnDestroy {
     this.simApi.uploadCsv(file, tipo).subscribe({
       next: (res) => {
         this.csvErrorsByField[campo] = res.errors.map(e =>
-          e.row > 0 ? `Fila ${e.row} · ${e.column}: ${e.reason}` : `${e.column}: ${e.reason}`
+          e.row > 0 ? `Fila ${e.row} - ${e.column}: ${e.reason}` : `${e.column}: ${e.reason}`
         );
         this.busService.setField({ [campo]: res.valid ? 'valido' : 'errores' } as Partial<BusState>);
       },

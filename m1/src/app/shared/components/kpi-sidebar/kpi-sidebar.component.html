@@ -9,7 +9,7 @@
       @for (def of kpiDefs; track def.id) {
         <div class="kpi-sidebar__item" [class.kpi-sidebar__item--inactive]="!isActive(def)">
           <span class="kpi-sidebar__dot" [style.background]="statusColor(def)"></span>
-          <span class="kpi-sidebar__label">{{ def.code }} · {{ def.id }}</span>
+          <span class="kpi-sidebar__label">{{ def.code }} - {{ def.id }}</span>
           <span class="kpi-sidebar__info" [attr.data-tooltip]="def.description">ⓘ</span>
           <span class="kpi-sidebar__value">{{ displayValue(def) }}</span>
           <span class="kpi-sidebar__unit">{{ isActive(def) ? def.unit : '' }}</span>
