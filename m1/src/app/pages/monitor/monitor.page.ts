@@ -4,6 +4,7 @@ import { BusClientService, BusState } from '../../core/services/bus-client.servi
 import { BusStripComponent } from '../../shared/components/bus-strip/bus-strip.component';
 import { ControlBarComponent } from '../../shared/components/control-bar/control-bar.component';
 import { RobotGridComponent } from '../../shared/components/robot-grid/robot-grid.component';
+import { KpiSidebarComponent } from '../../shared/components/kpi-sidebar/kpi-sidebar.component';
 
 type Vista = '2d' | '3d';
 
@@ -11,7 +12,7 @@ type Vista = '2d' | '3d';
   selector: 'app-monitor',
   templateUrl: './monitor.page.html',
   styleUrls: ['./monitor.page.scss'],
-  imports: [BusStripComponent, ControlBarComponent, RobotGridComponent],
+  imports: [BusStripComponent, ControlBarComponent, RobotGridComponent, KpiSidebarComponent],
 })
 export class MonitorPage implements OnInit, OnDestroy {
   bus: BusState | null = null;
