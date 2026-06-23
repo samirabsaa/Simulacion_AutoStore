@@ -17,6 +17,18 @@ export interface WsEstacion {
   orientacion: string;    // 'E' (borde Este) | 'O' (borde Oeste)
 }
 
+export interface WsConveyor {        // conveyor de ingreso (Norte)
+  x: number;
+  y: number;
+}
+
+export interface WsInterior {        // límites del almacenaje (inclusivos)
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
 export interface WsGrillaCell {
   id_caja:  string;
   id_sku:   string;
@@ -44,8 +56,10 @@ export interface WsTickPayload {
   status:    string;
   velocidad: number;
   grid:      { x: number; y: number; z: number } | null;
-  gridTotal?: { x: number; y: number } | null;   // superficie con anillo: (x+2)×(y+2)
-  estaciones?: WsEstacion[];
+  gridTotal?: { x: number; y: number } | null;   // superficie total transitable (con corredores)
+  interior?: WsInterior | null;                   // límites del almacenaje
+  estaciones?: WsEstacion[];                      // estaciones de salida (E/O)
+  conveyorsNorte?: WsConveyor[];                  // conveyors de ingreso (Norte)
   robots:    WsRobotState[];
   grilla:    WsGrillaCell[];
   pedidos:   { cola: unknown[]; completados: unknown[] };

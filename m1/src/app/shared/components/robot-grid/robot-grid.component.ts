@@ -1,24 +1,27 @@
 import { Component, Input, OnChanges, OnInit } from '@angular/core';
-import { WsGrillaCell, WsRobotState, WsEstacion } from '../../../core/models/state-bus-snapshot.model';
+import {
+  WsGrillaCell, WsRobotState, WsEstacion, WsConveyor, WsInterior,
+} from '../../../core/models/state-bus-snapshot.model';
 import { robotStateShort } from '../../../core/utils/robot-state.util';
 
 interface HeatCell {
-  key:     string;
-  ring:    boolean;        // celda del anillo de tránsito (sin cajas)
-  occ:     number;        // % ocupación de la columna (solo interior)
-  color:   string;
-  station: string | null; // 'E' | 'O' si hay estación de despacho
+  key:       string;
+  transito:  boolean;        // celda de tránsito (corredor, sin cajas)
+  occ:       number;        // % ocupación de la columna (solo interior)
+  color:     string;
+  station:   string | null; // 'E' | 'O' (salida picking)
+  conveyor:  boolean;       // conveyor de ingreso (Norte)
 }
 
 // Robot 1×2 dibujado como un rectángulo que ocupa sus dos celdas (cuerpo + punta).
 interface RobotRect {
-  id:        number;
-  estado:    string;
-  icon:      string;
-  ori:       string;
-  gridCol:   string;       // CSS grid-column (con span si es horizontal)
-  gridRow:   string;       // CSS grid-row (con span si es vertical)
-  tipClass:  string;       // dirección de la punta para el indicador
+  id:       number;
+  estado:   string;
+  icon:     string;
+  ori:      string;
+  gridCol:  string;
+  gridRow:  string;
+  tipClass: string;
 }
 
 function occColor(o: number): string {
@@ -31,8 +34,9 @@ function occColor(o: number): string {
 }
 
 // Desplazamiento de la punta según orientación fija (igual que el motor).
+// Norte = arriba → la punta apunta a y menor.
 const TIP_OFFSET: Record<string, [number, number]> = {
-  N: [0, 1], E: [1, 0], O: [-1, 0],
+  N: [0, -1], E: [1, 0], O: [-1, 0],
 };
 
 @Component({
@@ -42,12 +46,13 @@ const TIP_OFFSET: Record<string, [number, number]> = {
   imports: [],
 })
 export class RobotGridComponent implements OnInit, OnChanges {
-  @Input() gridX   = 12;   // interior (almacenable)
-  @Input() gridY   = 10;
   @Input() gridZ   = 5;
+  @Input() gridTotal: { x: number; y: number } | null = null;
+  @Input() interior: WsInterior | null = null;
   @Input() grilla: WsGrillaCell[] = [];
   @Input() robots: WsRobotState[] = [];
   @Input() estaciones: WsEstacion[] = [];
+  @Input() conveyorsNorte: WsConveyor[] = [];
   @Input() tick    = 0;
 
   cells: HeatCell[] = [];
@@ -69,19 +74,22 @@ export class RobotGridComponent implements OnInit, OnChanges {
     { mod: 'depositing', label: 'Entregando' },
   ];
 
-  // Superficie total = interior + anillo de tránsito que lo envuelve.
-  get cols(): number { return Math.min(this.gridX + 2, 24); }
-  get rows(): number { return Math.min(this.gridY + 2, 22); }
+  get cols(): number { return Math.min(this.gridTotal?.x ?? 14, 26); }
+  get rows(): number { return Math.min(this.gridTotal?.y ?? 12, 24); }
   get colTemplate(): string { return `repeat(${this.cols}, 1fr)`; }
   get rowTemplate(): string { return `repeat(${this.rows}, 1fr)`; }
 
   ngOnInit(): void { this.rebuild(); }
   ngOnChanges(): void { this.rebuild(); }
 
-  private rebuild(): void {
-    const gx = this.gridX, gy = this.gridY;
+  private esInterior(x: number, y: number): boolean {
+    const i = this.interior;
+    if (!i) return false;
+    return x >= i.x0 && x <= i.x1 && y >= i.y0 && y <= i.y1;
+  }
 
-    // ── Fondo: ocupación por columna interior + estaciones ──
+  private rebuild(): void {
+    // ── Fondo: ocupación interior + estaciones + conveyors ──
     const boxCount = new Map<string, number>();
     for (const c of this.grilla) {
       const key = `${c.x}-${c.y}`;
@@ -89,33 +97,33 @@ export class RobotGridComponent implements OnInit, OnChanges {
     }
     const estMap = new Map<string, string>();
     for (const e of this.estaciones) estMap.set(`${e.x}-${e.y}`, e.orientacion);
+    const convSet = new Set<string>();
+    for (const c of this.conveyorsNorte) convSet.add(`${c.x}-${c.y}`);
 
     const cells: HeatCell[] = [];
-    for (let y = 0; y <= gy + 1; y++) {
-      for (let x = 0; x <= gx + 1; x++) {
-        if (x >= this.cols || y >= this.rows) continue;
+    for (let y = 0; y < this.rows; y++) {
+      for (let x = 0; x < this.cols; x++) {
         const key = `${x}-${y}`;
-        const interior = x >= 1 && x <= gx && y >= 1 && y <= gy;
+        const interior = this.esInterior(x, y);
         const occ = interior ? ((boxCount.get(key) ?? 0) / this.gridZ) * 100 : 0;
         cells.push({
           key,
-          ring: !interior,
+          transito: !interior,
           occ: Math.round(occ),
           color: occColor(occ),
           station: estMap.get(key) ?? null,
+          conveyor: convSet.has(key),
         });
       }
     }
     this.cells = cells;
 
-    // ── Robots: un rectángulo 1×2 por robot (cuerpo + punta) ──
-    // Líneas de CSS grid son 1-based: la celda en coord c ocupa las líneas c+1..c+2.
+    // ── Robots: rectángulo 1×2 (cuerpo + punta) ──
     const rects: RobotRect[] = [];
     for (const r of this.robots) {
       const ori = r.orientacion ?? 'N';
-      const off = TIP_OFFSET[ori] ?? [0, 1];
+      const off = TIP_OFFSET[ori] ?? [0, -1];
       const tx = r.x + off[0], ty = r.y + off[1];
-      // Celda superior-izquierda del par (cuerpo, punta).
       const minX = Math.min(r.x, tx), minY = Math.min(r.y, ty);
       const horizontal = off[1] === 0; // E/O ocupan 2 columnas; N ocupa 2 filas
       rects.push({

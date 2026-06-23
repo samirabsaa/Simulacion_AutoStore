@@ -2,7 +2,7 @@ import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { SimMode, PickingPolicy, SimStatus } from '../enums/sim.enums';
 import { GridConfig, DEFAULT_GRID_CONFIG } from '../models/grid-config.model';
-import { WsTickPayload, WsSystemErrorPayload, WsRobotState, WsGrillaCell, WsEstacion } from '../models/state-bus-snapshot.model';
+import { WsTickPayload, WsSystemErrorPayload, WsRobotState, WsGrillaCell, WsEstacion, WsConveyor, WsInterior } from '../models/state-bus-snapshot.model';
 import { SimApiService } from './sim-api.service';
 import { environment } from '../../../environments/environment';
 
@@ -51,6 +51,9 @@ export interface BusState {
   robots: WsRobotState[];
   grilla: WsGrillaCell[];
   estaciones: WsEstacion[];
+  conveyorsNorte: WsConveyor[];
+  gridTotal: { x: number; y: number } | null;
+  interior: WsInterior | null;
   robotsNorte: number;
   robotsEste: number;
   robotsOeste: number;
@@ -83,7 +86,8 @@ const INITIAL_STATE: BusState = {
   archivoOla: 'no_cargado', archivoReposicion: 'no_cargado',
   falloSistema: null, omniverse: 'headless',
   kpis: { ...EMPTY_KPIS }, status: SimStatus.IDLE,
-  robots: [], grilla: [], estaciones: [],
+  robots: [], grilla: [], estaciones: [], conveyorsNorte: [],
+  gridTotal: null, interior: null,
   robotsNorte: FORUS_DEFAULTS.robotsNorte,
   robotsEste: FORUS_DEFAULTS.robotsEste,
   robotsOeste: FORUS_DEFAULTS.robotsOeste,
@@ -175,6 +179,11 @@ export class BusClientService implements OnDestroy {
       estaciones: msg.grid != null && Array.isArray(msg.estaciones)
         ? msg.estaciones
         : (Array.isArray(msg.estaciones) && msg.estaciones.length > 0 ? msg.estaciones : s.estaciones),
+      conveyorsNorte: msg.grid != null && Array.isArray(msg.conveyorsNorte)
+        ? msg.conveyorsNorte
+        : (Array.isArray(msg.conveyorsNorte) && msg.conveyorsNorte.length > 0 ? msg.conveyorsNorte : s.conveyorsNorte),
+      gridTotal: msg.gridTotal ?? s.gridTotal,
+      interior:  msg.interior ?? s.interior,
       kpis,
     });
 

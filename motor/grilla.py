@@ -1,15 +1,24 @@
-"""motor/grilla.py — Grilla 3D de almacenamiento con anillo de tránsito envolvente.
+"""motor/grilla.py — Grilla 3D de almacenamiento con corredores de tránsito E·T·A.
 
-Modelo de coordenadas (robots 1×2 con orientación fija):
-- `config.grilla.x/y` = área **almacenable** (interior). Las cajas viven en el
-  interior desplazado +1: columnas `x ∈ [1..gx]`, `y ∈ [1..gy]`.
-- El **anillo de tránsito** envuelve la grilla: celdas con `x=0`, `x=gx+1`,
-  `y=0` o `y=gy+1`. No admite cajas; es solo para desplazamiento de robots y
-  para alojar las estaciones de despacho.
-- Superficie total transitable = `(gx+2) × (gy+2)`; robots y estaciones operan
-  en `[0..gx+1] × [0..gy+1]`.
-- **Estaciones** de despacho solo en Oeste (`x=0`, orientación OESTE) y Este
-  (`x=gx+1`, orientación ESTE). Un robot NORTE nunca entrega: colabora vía handoff.
+Modelo de coordenadas (robots 1×2 con orientación fija). Cada borde con estación
+sigue el patrón **E·T·A** (Entrega/conveyor → Tránsito → Almacenaje); el Sur, sin
+estaciones, es sólo **T·A**:
+
+  Márgenes por borde (celdas antes del almacenaje):
+    M_OESTE = 2 (estación picking + carril tránsito)
+    M_ESTE  = 2 (carril tránsito + estación picking)
+    M_NORTE = 2 (conveyor de ingreso + carril tránsito)
+    M_SUR   = 1 (sólo carril tránsito)
+
+  Almacenaje (interior): x ∈ [M_OESTE .. M_OESTE+gx-1] = [2..gx+1]
+                         y ∈ [M_NORTE .. M_NORTE+gy-1] = [2..gy+1]
+  Superficie total transitable: (gx + M_OESTE + M_ESTE) × (gy + M_NORTE + M_SUR)
+                                = (gx+4) × (gy+3)
+
+  Estaciones de SALIDA (picking): Oeste x=0 (OESTE), Este x=gx+3 (ESTE), intercaladas
+    en filas de almacenaje, `mitad(gy)` por lado.
+  Conveyors de INGRESO (Norte): y=0, intercaladas en columnas de almacenaje,
+    `mitad(gx)`. Entra carga en turno nocturno; los robots NORTE las recogen.
 
 Una Caja exacta por celda (x, y, z), alineado con el contrato del bus.
 """
@@ -21,30 +30,46 @@ from bus_persistencia.models.state import (
     Caja,
     Config,
     Estacion,
+    EstacionRol,
     Orientacion,
     TipoEstacion,
 )
+
+# Márgenes por borde (ver docstring). E·T·A en O/E/N; T·A en S.
+M_OESTE = 2
+M_ESTE = 2
+M_NORTE = 2
+M_SUR = 1
+
+
+def _mitad(n: int) -> int:
+    """Mitad redondeando hacia arriba (no truncando): ceil(n/2)."""
+    return (n + 1) // 2
 
 
 class Grilla:
     """Grilla 3D de almacenamiento con acceso O(1) por coordenada (x, y, z).
 
-    El almacenamiento ocupa el interior `[1..gx] × [1..gy] × [0..gz)`; el borde
-    exterior es anillo de tránsito (sin cajas) y aloja las estaciones E/O.
-    """
+    El almacenamiento ocupa el interior desplazado por los márgenes; el resto de la
+    superficie es tránsito y aloja estaciones de salida (E/O) y conveyors de ingreso
+    (Norte)."""
 
     def __init__(self, config: Config) -> None:
         self.config = config
         self._celdas: dict[tuple[int, int, int], Caja] = {}
         self._delta: list[Caja] = []
         self._remove: list[tuple[int, int, int]] = []
+        # Estaciones de SALIDA (picking, E/O) y conveyors de INGRESO (Norte).
         self._estaciones: tuple[Estacion, ...] = self._calcular_estaciones()
+        self._conveyors_norte: tuple[Estacion, ...] = self._calcular_conveyors_norte()
         self._estaciones_por_pos: dict[tuple[int, int], Estacion] = {
-            (e.x, e.y): e for e in self._estaciones
+            (e.x, e.y): e for e in (*self._estaciones, *self._conveyors_norte)
         }
-        # `puertos`: posiciones de entrega (celdas-estación del anillo W/E). Se
-        # mantiene el nombre por compatibilidad con políticas/despachador.
-        self._puertos: list[tuple[int, int]] = sorted(self._estaciones_por_pos)
+        # `puertos`: posiciones de entrega (celdas-estación de salida). Se mantiene el
+        # nombre por compatibilidad con políticas/despachador.
+        self._puertos: list[tuple[int, int]] = sorted(
+            (e.x, e.y) for e in self._estaciones
+        )
 
     # ------------------------------------------------------------------
     # Dimensiones y geometría
@@ -66,26 +91,31 @@ class Grilla:
 
     @property
     def ancho_total(self) -> int:
-        """Ancho de la superficie transitable, incluyendo el anillo: gx + 2."""
-        return self.gx + 2
+        """Ancho de la superficie transitable, incluyendo márgenes: gx + M_OESTE + M_ESTE."""
+        return self.gx + M_OESTE + M_ESTE
 
     @property
     def alto_total(self) -> int:
-        """Fondo de la superficie transitable, incluyendo el anillo: gy + 2."""
-        return self.gy + 2
+        """Alto de la superficie transitable, incluyendo márgenes: gy + M_NORTE + M_SUR."""
+        return self.gy + M_NORTE + M_SUR
+
+    @property
+    def interior_bounds(self) -> tuple[int, int, int, int]:
+        """Límites del almacenaje (x0, y0, x1, y1) inclusivos."""
+        return (M_OESTE, M_NORTE, M_OESTE + self.gx - 1, M_NORTE + self.gy - 1)
 
     def es_interior(self, x: int, y: int) -> bool:
-        """True si (x,y) es una columna almacenable (interior, no anillo)."""
-        return 1 <= x <= self.gx and 1 <= y <= self.gy
-
-    def es_transito(self, x: int, y: int) -> bool:
-        """True si (x,y) pertenece al anillo de tránsito (borde, sin cajas)."""
-        en_superficie = 0 <= x <= self.gx + 1 and 0 <= y <= self.gy + 1
-        return en_superficie and not self.es_interior(x, y)
+        """True si (x,y) es una columna almacenable (interior, no tránsito)."""
+        x0, y0, x1, y1 = self.interior_bounds
+        return x0 <= x <= x1 and y0 <= y <= y1
 
     def en_superficie(self, x: int, y: int) -> bool:
         """True si (x,y) está dentro de la superficie transitable total."""
-        return 0 <= x <= self.gx + 1 and 0 <= y <= self.gy + 1
+        return 0 <= x < self.ancho_total and 0 <= y < self.alto_total
+
+    def es_transito(self, x: int, y: int) -> bool:
+        """True si (x,y) es celda de tránsito (en superficie y no interior)."""
+        return self.en_superficie(x, y) and not self.es_interior(x, y)
 
     # ------------------------------------------------------------------
     # Inicialización
@@ -93,18 +123,18 @@ class Grilla:
 
     def inicializar_aleatoria(self, seed: int | None = None) -> None:
         """Puebla el interior aleatoriamente hasta `config.ocupacion_inicial`.
-        El anillo de tránsito nunca recibe cajas. Usa `seed` para reproducibilidad."""
+        El tránsito nunca recibe cajas. Usa `seed` para reproducibilidad."""
         rng = random.Random(seed)
         cap = self.capacidad_almacenable
         ocupacion = self.config.ocupacion_inicial
         n_cajas = int(cap * ocupacion / 100 if ocupacion > 1 else cap * ocupacion)
 
         gz = self.gz
-        # Solo celdas interiores son almacenables.
+        x0, y0, x1, y1 = self.interior_bounds
         todas_celdas = [
             (x, y, z)
-            for x in range(1, self.gx + 1)
-            for y in range(1, self.gy + 1)
+            for x in range(x0, x1 + 1)
+            for y in range(y0, y1 + 1)
             for z in range(gz)
         ]
         n_cajas = min(n_cajas, len(todas_celdas))
@@ -129,12 +159,12 @@ class Grilla:
     def agregar(self, caja: Caja) -> None:
         """Coloca una caja en su celda (x,y,z) del interior.
 
-        Lanza ValueError si la celda no es interior (anillo de tránsito o fuera
-        de la zona almacenable): el anillo es exclusivo para robots."""
+        Lanza ValueError si la celda no es interior (tránsito o fuera de la zona
+        almacenable): el tránsito es exclusivo para robots."""
         if not self.es_interior(caja.x, caja.y):
             raise ValueError(
                 f"Celda ({caja.x},{caja.y}) no es interior almacenable "
-                f"(anillo de tránsito o fuera de grilla): no admite cajas."
+                f"(tránsito o fuera de grilla): no admite cajas."
             )
         key = (caja.x, caja.y, caja.z)
         self._celdas[key] = caja
@@ -166,7 +196,7 @@ class Grilla:
 
     def celdas_libres_en_columna(self, x: int, y: int) -> list[int]:
         """Niveles z disponibles (sin caja) en la columna interior (x,y).
-        Una columna de tránsito (anillo) nunca tiene niveles almacenables."""
+        Una columna de tránsito nunca tiene niveles almacenables."""
         if not self.es_interior(x, y):
             return []
         gz = self.gz
@@ -178,8 +208,8 @@ class Grilla:
         return [(cx, cy) for cx, cy in candidatas if self.es_interior(cx, cy)]
 
     def celdas_adyacentes_superficie(self, x: int, y: int) -> list[tuple[int, int]]:
-        """Celdas vecinas (ortogonales) dentro de la superficie transitable total,
-        incluyendo el anillo. Para el desplazamiento de robots (no para cajas)."""
+        """Celdas vecinas (ortogonales) dentro de la superficie transitable total.
+        Para el desplazamiento de robots (no para cajas)."""
         candidatas = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
         return [(cx, cy) for cx, cy in candidatas if self.en_superficie(cx, cy)]
 
@@ -204,78 +234,100 @@ class Grilla:
         return min(candidatas, key=costo_excavacion)
 
     # ------------------------------------------------------------------
-    # Estaciones de despacho (Oeste / Este) — en el anillo
+    # Estaciones de salida (picking, E/O) y conveyors de ingreso (Norte)
     # ------------------------------------------------------------------
 
     def _calcular_estaciones(self) -> tuple[Estacion, ...]:
-        """Estaciones de despacho en el anillo Oeste (x=0, orientación OESTE) y
-        Este (x=gx+1, orientación ESTE), una por fila interior `y ∈ [1..gy]`.
-
-        Si la config trae estaciones explícitas, se respetan tal cual."""
+        """Estaciones de SALIDA (picking): Oeste en x=0 (OESTE) y Este en
+        x=ancho_total-1 (ESTE), intercaladas en filas de almacenaje, `mitad(gy)`
+        por lado. Si la config trae estaciones explícitas, se respetan."""
         if self.config.estaciones:
             return tuple(self.config.estaciones)
+        x_oeste = 0
+        x_este = self.ancho_total - 1
+        y0, y1 = M_NORTE, M_NORTE + self.gy - 1
+        filas = list(range(y0, y1 + 1, 2))  # intercaladas → mitad(gy)
         estaciones: list[Estacion] = []
-        for y in range(1, self.gy + 1):
+        for y in filas:
             estaciones.append(Estacion(
-                id=f"EST-O-{y}", x=0, y=y,
+                id=f"EST-O-{y}", x=x_oeste, y=y,
                 tipo=TipoEstacion.CINTA,
                 orientacion_requerida=Orientacion.OESTE,
+                rol=EstacionRol.ENTREGA,
             ))
             estaciones.append(Estacion(
-                id=f"EST-E-{y}", x=self.gx + 1, y=y,
+                id=f"EST-E-{y}", x=x_este, y=y,
                 tipo=TipoEstacion.CINTA,
                 orientacion_requerida=Orientacion.ESTE,
+                rol=EstacionRol.ENTREGA,
             ))
         return tuple(estaciones)
 
+    def _calcular_conveyors_norte(self) -> tuple[Estacion, ...]:
+        """Conveyors de INGRESO en el Norte (y=0), intercaladas en columnas de
+        almacenaje, `mitad(gx)`. Orientación NORTE, rol INGRESO."""
+        x0, x1 = M_OESTE, M_OESTE + self.gx - 1
+        cols = list(range(x0, x1 + 1, 2))  # intercaladas → mitad(gx)
+        return tuple(
+            Estacion(
+                id=f"CONV-N-{x}", x=x, y=0,
+                tipo=TipoEstacion.CINTA,
+                orientacion_requerida=Orientacion.NORTE,
+                rol=EstacionRol.INGRESO,
+            )
+            for x in cols
+        )
+
     @property
     def estaciones(self) -> tuple[Estacion, ...]:
+        """Estaciones de SALIDA (picking, E/O) — las usadas en turno diurno."""
         return self._estaciones
+
+    @property
+    def conveyors_norte(self) -> tuple[Estacion, ...]:
+        """Conveyors de INGRESO del Norte — usadas en turno nocturno."""
+        return self._conveyors_norte
 
     def estacion_en(self, x: int, y: int) -> Estacion | None:
         return self._estaciones_por_pos.get((x, y))
 
     def estaciones_compatibles(self, orientacion: Orientacion) -> list[Estacion]:
-        """Estaciones que un robot con la orientación dada puede usar para entregar.
-
-        Un robot entrega cuando su punta queda sobre la celda-estación; eso solo
-        es posible si su orientación coincide con la requerida por la estación.
-        Los robots NORTE no tienen estaciones compatibles (deben colaborar)."""
+        """Estaciones de SALIDA que un robot con la orientación dada puede usar para
+        entregar (su punta cae sobre la celda-estación). Los robots NORTE no tienen
+        estación de salida compatible (deben colaborar vía handoff)."""
         return [e for e in self._estaciones if e.orientacion_requerida == orientacion]
 
     def estacion_compatible_mas_cercana(
         self, x: int, y: int, orientacion: Orientacion
     ) -> Estacion | None:
-        """Estación compatible con `orientacion` más cercana (Manhattan) a (x,y)."""
+        """Estación de salida compatible más cercana (Manhattan) a (x,y)."""
         compatibles = self.estaciones_compatibles(orientacion)
         if not compatibles:
             return None
         return min(compatibles, key=lambda e: abs(e.x - x) + abs(e.y - y))
 
     # ------------------------------------------------------------------
-    # Puertos (compatibilidad) — posiciones de entrega del anillo
+    # Tránsito y puertos (compatibilidad)
     # ------------------------------------------------------------------
 
     @property
     def anillo(self) -> list[tuple[int, int]]:
-        """Celdas (x,y) del anillo de tránsito, ordenadas."""
-        gx1, gy1 = self.gx + 1, self.gy + 1
-        celdas = set()
-        for x in range(0, gx1 + 1):
-            celdas.add((x, 0))
-            celdas.add((x, gy1))
-        for y in range(0, gy1 + 1):
-            celdas.add((0, y))
-            celdas.add((gx1, y))
-        return sorted(celdas)
+        """Todas las celdas de tránsito (superficie no interior), ordenadas.
+        Base para el spawn de robots y para el render del corredor."""
+        return sorted(
+            (x, y)
+            for y in range(self.alto_total)
+            for x in range(self.ancho_total)
+            if not self.es_interior(x, y)
+        )
 
     @property
     def puertos(self) -> list[tuple[int, int]]:
-        """Posiciones de entrega (celdas-estación del anillo W/E)."""
+        """Posiciones de entrega (celdas-estación de salida E/O)."""
         return self._puertos
 
     def puerto_mas_cercano(self, x: int, y: int) -> tuple[int, int]:
-        """Estación con menor distancia Manhattan a la columna (x, y)."""
+        """Estación de salida con menor distancia Manhattan a la columna (x, y)."""
         return min(self._puertos, key=lambda p: abs(p[0] - x) + abs(p[1] - y))
 
     # ------------------------------------------------------------------

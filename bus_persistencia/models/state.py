@@ -53,6 +53,18 @@ class TipoEstacion(str, Enum):
     CARRUSEL = "carrusel"  # procesa 2 productos por tick
 
 
+class EstacionRol(str, Enum):
+    """Rol de una estación: salida de picking (ENTREGA) o entrada de cajas (INGRESO).
+
+    - ENTREGA: estaciones E/O donde los robots E/O depositan cajas recuperadas
+      (salida hacia el clasificador real).
+    - INGRESO: conveyors del Norte por donde ENTRAN cajas al sistema (turno
+      nocturno); los robots NORTE las recogen y las almacenan en la grilla.
+    """
+    ENTREGA = "entrega"
+    INGRESO = "ingreso"
+
+
 KPI_NAMES = ("TSP", "TPCP", "MTRP", "IOG", "TR", "TI", "TBR")
 
 
@@ -79,6 +91,7 @@ class Estacion:
     y: int
     tipo: TipoEstacion = TipoEstacion.CINTA
     orientacion_requerida: Orientacion = Orientacion.NORTE
+    rol: EstacionRol = EstacionRol.ENTREGA
 
     @property
     def capacidad_tick(self) -> int:
@@ -144,7 +157,7 @@ class Robot:
 # La punta es la celda donde el robot excava/pickea y transporta la caja. El robot
 # nunca rota: su orientación se fija al crearse y el footprint se traslada rígido.
 _PUNTA_OFFSET: dict[Orientacion, tuple[int, int]] = {
-    Orientacion.NORTE: (0, 1),   # punta en (x, y+1)
+    Orientacion.NORTE: (0, -1),  # punta en (x, y-1) — Norte = arriba (y menor)
     Orientacion.ESTE: (1, 0),    # punta en (x+1, y)
     Orientacion.OESTE: (-1, 0),  # punta en (x-1, y)
 }

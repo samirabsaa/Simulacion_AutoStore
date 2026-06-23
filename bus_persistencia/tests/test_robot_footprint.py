@@ -19,7 +19,8 @@ def _robot(x: int, y: int, ori: Orientacion) -> Robot:
 
 
 def test_punta_norte():
-    assert punta(_robot(3, 4, Orientacion.NORTE)) == (3, 5)
+    # Norte = arriba: la punta apunta a y menor (y-1).
+    assert punta(_robot(3, 4, Orientacion.NORTE)) == (3, 3)
 
 
 def test_punta_este():
@@ -32,7 +33,7 @@ def test_punta_oeste():
 
 def test_celdas_robot_incluye_cuerpo_y_punta():
     r = _robot(3, 4, Orientacion.NORTE)
-    assert celdas_robot(r) == [(3, 4), (3, 5)]
+    assert celdas_robot(r) == [(3, 4), (3, 3)]
 
 
 def test_celdas_robot_dos_celdas_distintas_todas_orientaciones():

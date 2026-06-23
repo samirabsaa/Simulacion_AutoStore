@@ -1,14 +1,17 @@
 <div class="occ-heatmap">
   <div class="occ-heatmap__board">
-    <!-- Capa de fondo: ocupación + anillo + estaciones -->
+    <!-- Capa de fondo: ocupación + corredores de tránsito + estaciones + conveyors -->
     <div class="occ-heatmap__grid" [style.grid-template-columns]="colTemplate">
       @for (cell of cells; track cell.key) {
         <div class="occ-heatmap__cell"
-             [class.occ-heatmap__cell--ring]="cell.ring"
+             [class.occ-heatmap__cell--transito]="cell.transito"
              [class.occ-heatmap__cell--station]="cell.station"
-             [style.background]="cell.ring ? null : cell.color">
+             [class.occ-heatmap__cell--conveyor]="cell.conveyor"
+             [style.background]="cell.transito ? null : cell.color">
           @if (cell.station) {
             <span class="occ-heatmap__station">{{ cell.station }}</span>
+          } @else if (cell.conveyor) {
+            <span class="occ-heatmap__conveyor" title="Conveyor de ingreso (Norte)">▦</span>
           }
         </div>
       }
@@ -56,11 +59,15 @@
     }
     <div class="occ-heatmap__legend-item">
       <span class="occ-heatmap__legend-swatch occ-heatmap__legend-swatch--ring"></span>
-      <span>Anillo de tránsito</span>
+      <span>Corredor de tránsito (E·T·A)</span>
     </div>
     <div class="occ-heatmap__legend-item">
       <span class="occ-heatmap__legend-swatch occ-heatmap__legend-swatch--station">E/O</span>
-      <span>Estaciones de despacho</span>
+      <span>Estaciones de salida (picking)</span>
+    </div>
+    <div class="occ-heatmap__legend-item">
+      <span class="occ-heatmap__legend-swatch occ-heatmap__legend-swatch--conveyor">▦</span>
+      <span>Conveyors de ingreso (Norte)</span>
     </div>
   </div>
 </div>

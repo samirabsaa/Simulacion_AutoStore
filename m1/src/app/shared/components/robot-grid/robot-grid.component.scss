@@ -27,18 +27,24 @@
     transition: background 400ms ease;
     background: var(--occ-1, #f1f5f9);
 
-    // Anillo de tránsito: corredor perimetral sin cajas.
-    &--ring {
+    // Corredor de tránsito (E·T·A): sin cajas.
+    &--transito {
       background: repeating-linear-gradient(
         45deg, #e5e7eb, #e5e7eb 4px, #eef2f7 4px, #eef2f7 8px
       );
       border: 1px dashed #cbd5e1;
     }
 
-    // Celda-estación de despacho (en el anillo).
+    // Celda-estación de salida (picking, E/O).
     &--station {
       background: #0f172a;
       border: 1px solid #334155;
+    }
+
+    // Conveyor de ingreso (Norte).
+    &--conveyor {
+      background: #1e3a5f;
+      border: 1px solid #2563eb;
     }
   }
 
@@ -52,6 +58,16 @@
     font-size: 9px;
     font-weight: 700;
     color: #38bdf8;
+  }
+
+  &__conveyor {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #93c5fd;
   }
 
   // Rectángulo 1×2 del robot (ocupa cuerpo + punta vía grid-column/row span).
@@ -163,6 +179,15 @@
       text-align: center;
       line-height: 16px;
       font-family: var(--font-mono);
+    }
+
+    &--conveyor {
+      background: #1e3a5f;
+      border: 1px solid #2563eb;
+      color: #93c5fd;
+      font-size: 10px;
+      text-align: center;
+      line-height: 16px;
     }
   }
 

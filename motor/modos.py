@@ -132,11 +132,9 @@ def _primera_celda_libre(grilla: Grilla) -> tuple[int, int, int] | None:
     """Retorna la primera celda interior (x,y,z) vacía, recorriendo columnas de
     menor z. Prioriza llenar desde abajo (z=0). El anillo de tránsito (borde) se
     excluye: solo las columnas almacenables [1..gx]×[1..gy] reciben cajas."""
-    gx = grilla.config.grilla.x
-    gy = grilla.config.grilla.y
-
-    for x in range(1, gx + 1):
-        for y in range(1, gy + 1):
+    x0, y0, x1, y1 = grilla.interior_bounds
+    for x in range(x0, x1 + 1):
+        for y in range(y0, y1 + 1):
             libres = grilla.celdas_libres_en_columna(x, y)
             if libres:
                 return (x, y, libres[0])  # z más bajo disponible

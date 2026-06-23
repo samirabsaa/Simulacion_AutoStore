@@ -89,17 +89,25 @@ def snapshot_to_payload(snapshot: StateSnapshot, status: str, velocidad: int) ->
         else None
     )
 
-    # Robots 1×2: el área almacenable es el interior [1..gx]×[1..gy]; el anillo de
-    # tránsito envuelve la grilla (superficie total (gx+2)×(gy+2)). Las estaciones
-    # de despacho están en el anillo Oeste (x=0, OESTE) y Este (x=gx+1, ESTE).
+    # Geometría real (corredores E·T·A asimétricos): se deriva de la propia Grilla
+    # para no duplicar la lógica de márgenes/estaciones. El almacenaje vive en el
+    # interior desplazado; las estaciones de salida (E/O) y las conveyors de ingreso
+    # (Norte) están en el tránsito perimetral.
     estaciones: list[dict[str, Any]] = []
+    conveyors_norte: list[dict[str, Any]] = []
     grid_total = None
+    interior = None
     if snapshot.config is not None:
-        gx, gy = snapshot.config.grilla.x, snapshot.config.grilla.y
-        grid_total = {"x": gx + 2, "y": gy + 2}
-        for y in range(1, gy + 1):
-            estaciones.append({"x": 0, "y": y, "orientacion": "O"})
-            estaciones.append({"x": gx + 1, "y": y, "orientacion": "E"})
+        from motor.grilla import Grilla
+        g = Grilla(snapshot.config)
+        grid_total = {"x": g.ancho_total, "y": g.alto_total}
+        x0, y0, x1, y1 = g.interior_bounds
+        interior = {"x0": x0, "y0": y0, "x1": x1, "y1": y1}
+        estaciones = [
+            {"x": e.x, "y": e.y, "orientacion": e.orientacion_requerida.value}
+            for e in g.estaciones
+        ]
+        conveyors_norte = [{"x": c.x, "y": c.y} for c in g.conveyors_norte]
 
     return {
         "type": "tick",
@@ -110,7 +118,9 @@ def snapshot_to_payload(snapshot: StateSnapshot, status: str, velocidad: int) ->
         "velocidad": velocidad,
         "grid": grid,
         "gridTotal": grid_total,
+        "interior": interior,
         "estaciones": estaciones,
+        "conveyorsNorte": conveyors_norte,
         "robots": [robot_to_dict(r) for r in snapshot.robots],
         "grilla": [caja_to_dict(c) for c in snapshot.grilla],
         "pedidos": {

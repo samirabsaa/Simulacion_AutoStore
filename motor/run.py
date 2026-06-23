@@ -94,13 +94,16 @@ def _asegurar_cajas_para_skus(sim: AutoStoreSimulator) -> None:
     # Orden ordenado por SKU → colocación reproducible entre corridas
     for sku in sorted(demanda_por_sku):
         faltan = demanda_por_sku[sku] - existentes_por_sku.get(sku, 0)
+        # Coordenadas interiores reales según los márgenes de la grilla (el tránsito
+        # y las estaciones no admiten cajas — robots 1×2).
+        x0, y0, x1, y1 = sim._grilla.interior_bounds
+        ancho = x1 - x0 + 1
+        alto = y1 - y0 + 1
         for _ in range(max(0, faltan)):
             colocado = False
-            for cell_idx in range(gx * gy):
-                # Coordenadas interiores [1..gx]×[1..gy] (el borde es anillo de
-                # tránsito y no admite cajas — robots 1×2).
-                x = cell_idx % gx + 1
-                y = (cell_idx // gx) % gy + 1
+            for cell_idx in range(ancho * alto):
+                x = cell_idx % ancho + x0
+                y = (cell_idx // ancho) % alto + y0
                 for z in range(gz):
                     if not sim._grilla.ocupada(x, y, z):
                         caja = Caja(
