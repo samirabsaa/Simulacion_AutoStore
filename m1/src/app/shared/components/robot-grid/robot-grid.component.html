@@ -1,34 +1,39 @@
 <div class="occ-heatmap">
-  <div class="occ-heatmap__grid" [style.grid-template-columns]="colTemplate">
-    @for (cell of cells; track cell.key + '-' + cell.robotRole + '-' + cell.robotId) {
-      <div class="occ-heatmap__cell"
-           [class.occ-heatmap__cell--ring]="cell.ring"
-           [class.occ-heatmap__cell--station]="cell.station"
-           [style.background]="cell.ring ? null : cell.color">
+  <div class="occ-heatmap__board">
+    <!-- Capa de fondo: ocupación + anillo + estaciones -->
+    <div class="occ-heatmap__grid" [style.grid-template-columns]="colTemplate">
+      @for (cell of cells; track cell.key) {
+        <div class="occ-heatmap__cell"
+             [class.occ-heatmap__cell--ring]="cell.ring"
+             [class.occ-heatmap__cell--station]="cell.station"
+             [style.background]="cell.ring ? null : cell.color">
+          @if (cell.station) {
+            <span class="occ-heatmap__station">{{ cell.station }}</span>
+          }
+        </div>
+      }
+    </div>
 
-        @if (cell.station && !cell.hasRobot) {
-          <span class="occ-heatmap__station">{{ cell.station }}</span>
-        }
-
-        @if (cell.hasRobot) {
-          <div class="occ-heatmap__robot"
-               [class.occ-heatmap__robot--tip]="cell.robotRole === 'tip'"
-               [class.occ-heatmap__robot--idle]="cell.robotEstado === 'IDLE'"
-               [class.occ-heatmap__robot--moving]="cell.robotEstado === 'MOVING'"
-               [class.occ-heatmap__robot--picking]="cell.robotEstado === 'PICKING'"
-               [class.occ-heatmap__robot--blocked]="cell.robotEstado === 'BLOCKED'"
-               [class.occ-heatmap__robot--depositing]="cell.robotEstado === 'DEPOSITING'"
-               [title]="'R' + cell.robotId + ' · ' + cell.robotEstado + ' · ' + cell.robotOri + (cell.robotRole === 'tip' ? ' (punta)' : '')">
-            @if (cell.robotRole === 'body') {
-              <span class="occ-heatmap__robot-id">R{{ cell.robotId }}</span>
-              <span class="occ-heatmap__robot-state">{{ cell.robotIcon }}</span>
-            } @else {
-              <span class="occ-heatmap__robot-tipdot">◆</span>
-            }
-          </div>
-        }
-      </div>
-    }
+    <!-- Capa overlay: robots 1×2 como rectángulos que ocupan sus dos celdas -->
+    <div class="occ-heatmap__robots"
+         [style.grid-template-columns]="colTemplate"
+         [style.grid-template-rows]="rowTemplate">
+      @for (rb of robotRects; track rb.id) {
+        <div class="occ-heatmap__robot"
+             [class]="rb.tipClass"
+             [class.occ-heatmap__robot--idle]="rb.estado === 'IDLE'"
+             [class.occ-heatmap__robot--moving]="rb.estado === 'MOVING'"
+             [class.occ-heatmap__robot--picking]="rb.estado === 'PICKING'"
+             [class.occ-heatmap__robot--blocked]="rb.estado === 'BLOCKED'"
+             [class.occ-heatmap__robot--depositing]="rb.estado === 'DEPOSITING'"
+             [style.grid-column]="rb.gridCol"
+             [style.grid-row]="rb.gridRow"
+             [title]="'R' + rb.id + ' · ' + rb.estado + ' · orientación ' + rb.ori">
+          <span class="occ-heatmap__robot-id">R{{ rb.id }}</span>
+          <span class="occ-heatmap__robot-state">{{ rb.icon }}</span>
+        </div>
+      }
+    </div>
   </div>
 
   <div class="occ-heatmap__legend">
@@ -42,7 +47,7 @@
   </div>
 
   <div class="occ-heatmap__legend occ-heatmap__legend--robots">
-    <span class="occ-heatmap__legend-heading">Robots 1×2 (cuerpo + ◆ punta)</span>
+    <span class="occ-heatmap__legend-heading">Robots 1×2 (orientación fija · la punta excava/entrega)</span>
     @for (s of stateLegend; track s.mod) {
       <div class="occ-heatmap__legend-item">
         <span class="occ-heatmap__legend-dot occ-heatmap__legend-dot--{{ s.mod }}"></span>

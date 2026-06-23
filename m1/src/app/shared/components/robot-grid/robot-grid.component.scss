@@ -1,9 +1,23 @@
 .occ-heatmap {
+  // Tablero: fondo (celdas) + overlay (robots) perfectamente superpuestos.
+  &__board {
+    position: relative;
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
   &__grid {
     display: grid;
     gap: 3px;
-    max-width: 760px;
-    margin: 0 auto;
+  }
+
+  // Overlay de robots: misma rejilla que el fondo, encima, sin capturar clics.
+  &__robots {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    gap: 3px;
+    pointer-events: none;
   }
 
   &__cell {
@@ -40,24 +54,25 @@
     color: #38bdf8;
   }
 
+  // Rectángulo 1×2 del robot (ocupa cuerpo + punta vía grid-column/row span).
   &__robot {
-    position: absolute;
-    inset: 0;
+    pointer-events: auto;
+    margin: 2px;
+    border-radius: 5px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 1px;
-    width: 78%;
-    height: 78%;
-    margin: auto;
-    border-radius: 50%;
-    background: var(--status-moving);
-    border: 2px solid #fff;
     color: #fff;
     font-family: var(--font-mono);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
     line-height: 1;
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    background: var(--status-moving, #3b82f6);
+    transition: all 350ms ease;
+    position: relative;
+    overflow: visible;
 
     &--blocked    { background: #ef4444; }
     &--moving     { background: #3b82f6; }
@@ -65,24 +80,21 @@
     &--depositing { background: #22c55e; }
     &--idle       { background: #6b7280; }
 
-    // Punta del robot 1×2: celda donde excava/pickea y transporta la caja.
-    // Se dibuja más pequeña, semitransparente y sin texto (solo un diamante).
-    &--tip {
-      width: 54%;
-      height: 54%;
-      border-style: dashed;
-      border-width: 2px;
-      opacity: 0.85;
+    // Indicador de la punta: un pequeño triángulo en el lado donde está la punta
+    // (donde el robot excava/transporta la caja).
+    &::after {
+      content: '';
+      position: absolute;
+      width: 0; height: 0;
+      border: 5px solid transparent;
     }
-  }
-
-  &__robot-tipdot {
-    font-size: 9px;
-    font-weight: 700;
+    &--tip-n::after { top: 1px;    left: 50%; transform: translateX(-50%); border-bottom-color: rgba(255,255,255,0.95); border-top-width: 0; }
+    &--tip-e::after { right: 1px;  top: 50%;  transform: translateY(-50%); border-left-color:  rgba(255,255,255,0.95); border-right-width: 0; }
+    &--tip-o::after { left: 1px;   top: 50%;  transform: translateY(-50%); border-right-color: rgba(255,255,255,0.95); border-left-width: 0; }
   }
 
   &__robot-id {
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
   }
 
@@ -90,6 +102,7 @@
     font-size: 7px;
     font-weight: 700;
     letter-spacing: -0.02em;
+    opacity: 0.9;
   }
 
   &__legend {
@@ -156,7 +169,7 @@
   &__legend-dot {
     width: 12px;
     height: 12px;
-    border-radius: 50%;
+    border-radius: 3px;
     display: inline-block;
     flex: none;
 

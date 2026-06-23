@@ -97,8 +97,10 @@ def _asegurar_cajas_para_skus(sim: AutoStoreSimulator) -> None:
         for _ in range(max(0, faltan)):
             colocado = False
             for cell_idx in range(gx * gy):
-                x = cell_idx % gx
-                y = (cell_idx // gx) % gy
+                # Coordenadas interiores [1..gx]×[1..gy] (el borde es anillo de
+                # tránsito y no admite cajas — robots 1×2).
+                x = cell_idx % gx + 1
+                y = (cell_idx // gx) % gy + 1
                 for z in range(gz):
                     if not sim._grilla.ocupada(x, y, z):
                         caja = Caja(
