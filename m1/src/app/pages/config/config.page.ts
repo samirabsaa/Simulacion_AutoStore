@@ -1,6 +1,7 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
+import { AlertController, ToastController } from '@ionic/angular/standalone';
 import { BusClientService, BusState, FORUS_DEFAULTS, DEMO1_CONFIG, DEMO2_CONFIG } from '../../core/services/bus-client.service';
 import { SimApiService } from '../../core/services/sim-api.service';
 import { SimMode, PickingPolicy } from '../../core/enums/sim.enums';
@@ -39,6 +40,8 @@ export class ConfigPage implements OnInit, OnDestroy {
     private busService: BusClientService,
     private simApi: SimApiService,
     private router: Router,
+    private alertCtrl: AlertController,
+    private toastCtrl: ToastController,
   ) {}
 
   ngOnInit(): void {
@@ -79,6 +82,16 @@ export class ConfigPage implements OnInit, OnDestroy {
 
   onPolicyChange(policy: string): void {
     this.busService.setPolicy(policy);
+    const label =
+      policy === PickingPolicy.FIFO ? 'FIFO' :
+      policy === PickingPolicy.PRIORITY_POSITION ? 'Prioridad Posición' :
+      policy;
+    this.toastCtrl.create({
+      message: `Política cambiada a ${label}`,
+      duration: 2000,
+      position: 'bottom',
+      color: 'success',
+    }).then(t => t.present());
   }
 
   @ViewChild('policyInput') policyInputRef!: ElementRef<HTMLInputElement>;
@@ -290,8 +303,19 @@ export class ConfigPage implements OnInit, OnDestroy {
     URL.revokeObjectURL(url);
   }
 
-  iniciar(): void {
+  async iniciar(): Promise<void> {
     if (!this.puedeIniciar) return;
+    const alert = await this.alertCtrl.create({
+      header: '¿Iniciar simulación?',
+      message: 'Se enviará la configuración al Motor y comenzará la ejecución.',
+      buttons: [
+        { text: 'Cancelar', role: 'cancel' },
+        { text: 'Iniciar', role: 'confirm' },
+      ],
+    });
+    await alert.present();
+    const { role } = await alert.onDidDismiss();
+    if (role !== 'confirm') return;
     this.busService.startSimulation();
     this.router.navigate(['/monitor']);
   }

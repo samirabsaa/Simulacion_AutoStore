@@ -114,6 +114,26 @@
         </div>
       </div>
 
+      <!-- Política de picking -->
+      <div class="as-card cfg__card">
+        <app-policy-selector
+          [currentPolicy]="bus.policy"
+          [customPolicies]="customPolicies"
+          (policyChange)="onPolicyChange($event)"
+          (loadExternal)="onLoadExternal()">
+        </app-policy-selector>
+        <input #policyInput type="file" accept=".py" style="display:none" (change)="onPolicyFileSelected($event)">
+
+        @if (policyUploadEstado === 'ok') {
+          <div class="cfg__policy-msg cfg__policy-msg--ok">
+            {{ policyUploadMsg }}
+          </div>
+        } @else if (policyUploadEstado === 'error') {
+          <div class="cfg__policy-msg cfg__policy-msg--error">
+            {{ policyUploadMsg }}
+          </div>
+        }
+      </div>
 
     </div><!-- /LEFT -->
 
@@ -175,36 +195,9 @@
           </button>
         </div>
 
-        @if (demoCargado === 'demo1') {
+        @if (demoCargado) {
           <div class="cfg__demo-info">
-            <b>Demo 1: FIFO 75%</b><br>
-            Usa el método "primero en llegar, primero en salir" con una ocupación moderada del almacén.<br>
-            Simula 30 pedidos en una cuadrícula de 12x10 con 5 niveles.<br>
-            Haz clic en <b>Iniciar Simulación</b> (arriba a la derecha) para ejecutar.
-          </div>
-        } @else if (demoCargado === 'demo2') {
-          <div class="cfg__demo-info">
-            <b>Demo 2: Prioridad 90%</b><br>
-            Usa el método "prioridad por posición" con el almacén casi lleno.<br>
-            Simula 40 pedidos en la misma cuadrícula.<br>
-            Haz clic en <b>Iniciar Simulación</b> (arriba a la derecha) para ejecutar.
-      <!-- Política de picking -->
-      <div class="as-card cfg__card">
-        <app-policy-selector
-          [currentPolicy]="bus.policy"
-          [customPolicies]="customPolicies"
-          (policyChange)="onPolicyChange($event)"
-          (loadExternal)="onLoadExternal()">
-        </app-policy-selector>
-        <input #policyInput type="file" accept=".py" style="display:none" (change)="onPolicyFileSelected($event)">
-
-        @if (policyUploadEstado === 'ok') {
-          <div class="cfg__policy-msg cfg__policy-msg--ok">
-            {{ policyUploadMsg }}
-          </div>
-        } @else if (policyUploadEstado === 'error') {
-          <div class="cfg__policy-msg cfg__policy-msg--error">
-            {{ policyUploadMsg }}
+            {{ demoCargado === 'demo1' ? 'Demo 1: FIFO 75% — 30 pedidos, 12×10×5, ocupación moderada' : 'Demo 2: Prioridad 90% — 40 pedidos, 12×10×5, almacén casi lleno' }}
           </div>
         }
       </div>
