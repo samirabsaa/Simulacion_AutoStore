@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Callable
 
 from bus_persistencia.bus.state_bus import StateBus
-from bus_persistencia.models.state import Caja, Config, ModoTurno, Pedido, PoliticaPicking
+from bus_persistencia.models.state import Caja, Config, ModoTurno, Pedido
 from motor.simulador import AutoStoreSimulator
 from motor.run import generar_ola_aleatoria, _asegurar_cajas_para_skus
 
@@ -37,7 +37,7 @@ class SimulationLoop:
         self._config: Config | None = None
         self._seed: int | None = None
         self._modo: ModoTurno | None = None
-        self._politica: PoliticaPicking | None = None
+        self._politica: str | None = None
         self._session_name: str = "default"
         self._pedidos_inicial: list[Pedido] = []
         self._reposicion_inicial: list[Caja] = []
@@ -58,7 +58,7 @@ class SimulationLoop:
         config: Config,
         seed: int | None = None,
         modo: ModoTurno | None = None,
-        politica: PoliticaPicking | None = None,
+        politica: str | None = None,
         pedidos_demandados: int | None = None,
         session_name: str | None = None,
     ) -> None:
@@ -85,7 +85,7 @@ class SimulationLoop:
     def set_velocidad(self, velocidad: int) -> None:
         self.velocidad = velocidad if velocidad in VELOCIDAD_INTERVALOS else 1
 
-    def set_politica(self, politica: PoliticaPicking) -> None:
+    def set_politica(self, politica: str) -> None:
         """Cambia la política activa; se preserva si luego se hace `/control/reset`."""
         self._politica = politica
         self.bus.set_policy(politica)

@@ -239,7 +239,7 @@ class AutoStoreSimulator:
     # Procesamiento por turno
     # ------------------------------------------------------------------
 
-    def _procesar_turno_diurno(self, politica: PoliticaPicking) -> None:
+    def _procesar_turno_diurno(self, politica: str) -> None:
         """Delega en motor.despachador (Manuel — T-12, T-15, T-16, T-17).
 
         Convenciones de delta (acuerdos con Martín):

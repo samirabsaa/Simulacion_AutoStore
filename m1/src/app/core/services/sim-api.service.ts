@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { GridConfig, toDTO } from '../models/grid-config.model';
 import { ValidationResultDTO } from '../models/csv-validation-error.model';
-import { PickingPolicy } from '../enums/sim.enums';
+
 import { environment } from '../../../environments/environment';
 
 @Injectable({ providedIn: 'root' })
@@ -14,8 +14,20 @@ export class SimApiService {
     return this.http.post<{ ok: boolean }>(`${environment.apiUrl}/config`, toDTO(cfg));
   }
 
-  setPolicy(p: PickingPolicy): Observable<{ ok: boolean }> {
+  setPolicy(p: string): Observable<{ ok: boolean }> {
     return this.http.post<{ ok: boolean }>(`${environment.apiUrl}/policy`, { policy: p });
+  }
+
+  uploadPolicy(file: File): Observable<{ ok: boolean; policy_name: string; detail?: string }> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<{ ok: boolean; policy_name: string; detail?: string }>(
+      `${environment.apiUrl}/api/upload/policy`, form,
+    );
+  }
+
+  getPolicies(): Observable<{ policies: string[] }> {
+    return this.http.get<{ policies: string[] }>(`${environment.apiUrl}/policies`);
   }
 
   play(): Observable<{ ok: boolean; status?: string }> {

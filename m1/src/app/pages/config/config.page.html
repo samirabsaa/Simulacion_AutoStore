@@ -110,6 +110,7 @@
         </div>
       </div>
 
+
     </div><!-- /LEFT -->
 
     <!-- ══════ RIGHT COLUMN ══════ -->
@@ -155,6 +156,27 @@
             <span class="cfg__metric-val mono">{{ capacidad.toLocaleString('es-CL') }}</span>
           </div>
         </div>
+      </div>
+
+      <!-- Política de picking -->
+      <div class="as-card cfg__card">
+        <app-policy-selector
+          [currentPolicy]="bus.policy"
+          [customPolicies]="customPolicies"
+          (policyChange)="onPolicyChange($event)"
+          (loadExternal)="onLoadExternal()">
+        </app-policy-selector>
+        <input #policyInput type="file" accept=".py" style="display:none" (change)="onPolicyFileSelected($event)">
+
+        @if (policyUploadEstado === 'ok') {
+          <div class="cfg__policy-msg cfg__policy-msg--ok">
+            {{ policyUploadMsg }}
+          </div>
+        } @else if (policyUploadEstado === 'error') {
+          <div class="cfg__policy-msg cfg__policy-msg--error">
+            {{ policyUploadMsg }}
+          </div>
+        }
       </div>
 
     </div><!-- /RIGHT -->

@@ -32,7 +32,7 @@ from bus_persistencia.persistence.report_generator import generate_report
 from bus_persistencia.persistence.validation import ValidationResult
 
 from api.loop_worker import SimulationLoop
-from api.serializers import MODO_FROM_M1, POLITICA_FROM_M1, snapshot_to_payload
+from api.serializers import MODO_FROM_M1, politica_from_m1, snapshot_to_payload
 
 bus = StateBus()
 _websockets: set[WebSocket] = set()
@@ -63,6 +63,11 @@ loop = SimulationLoop(bus, on_tick=_broadcast, output_dir=OUTPUT_DIR)
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     global _main_loop
     _main_loop = asyncio.get_running_loop()
+    import logging
+    from motor.plugin_loader import load_plugins
+    loaded = load_plugins()
+    if loaded:
+        logging.getLogger(__name__).info("Plugins cargados: %s", loaded)
     yield
 
 
@@ -129,7 +134,7 @@ def post_config(cfg: GridConfigDTO) -> dict[str, Any]:
         robots_oeste=cfg.robots_oeste or 0,
     )
     modo = MODO_FROM_M1.get(cfg.mode.upper())
-    politica = POLITICA_FROM_M1.get(cfg.policy.upper())
+    politica = politica_from_m1(cfg.policy)
     loop.configurar(config, seed=cfg.semilla, modo=modo, politica=politica,
                     pedidos_demandados=cfg.pedidos_demandados,
                     session_name=cfg.session_name)
@@ -138,11 +143,17 @@ def post_config(cfg: GridConfigDTO) -> dict[str, Any]:
 
 @app.post("/policy")
 def post_policy(body: PolicyDTO) -> dict[str, Any]:
-    politica = POLITICA_FROM_M1.get(body.policy.upper())
+    politica = politica_from_m1(body.policy)
     if politica is None:
         raise HTTPException(status_code=400, detail=f"Política desconocida: {body.policy!r}")
     loop.set_politica(politica)
     return {"ok": True}
+
+
+@app.get("/policies")
+def get_policies() -> dict[str, Any]:
+    from motor.politicas import list_politicas
+    return {"policies": list_politicas()}
 
 
 @app.post("/control/play")
@@ -185,6 +196,24 @@ async def ws_state(websocket: WebSocket) -> None:
         pass
     finally:
         _websockets.discard(websocket)
+
+
+PLUGINS_DIR = Path(__file__).resolve().parents[1] / "plugins" / "politicas"
+
+
+@app.post("/api/upload/policy")
+async def upload_policy(file: UploadFile) -> dict[str, Any]:
+    if not file.filename or not file.filename.endswith(".py"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un .py")
+    contents = await file.read()
+    PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
+    dest = PLUGINS_DIR / file.filename
+    dest.write_bytes(contents)
+    from motor.plugin_loader import validate_and_load_file
+    name, error = validate_and_load_file(dest)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    return {"ok": True, "policy_name": name}
 
 
 @app.post("/api/upload/ola")
