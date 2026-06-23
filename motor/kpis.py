@@ -49,7 +49,10 @@ def calcular_kpis(acum: Acumuladores, grilla: "Grilla", config: Config) -> KPISe
     # robot-ticks (suma sobre TODOS los robots), así que el denominador debe ser
     # ticks_totales × n_robots para que el resultado quede acotado en [0, 100%].
     # (Dividir solo por ticks_totales daba TBR > 100% con varios robots.)
-    robot_ticks = acum.ticks_totales * config.robots
+    # Conteo real de robots: con robots 1×2 la flota puede definirse por conteos
+    # de orientación (N/E/O); `config.robots` podría ser 0 en ese caso.
+    n_robots = config.robots or len(config.orientaciones_robots())
+    robot_ticks = acum.ticks_totales * n_robots
     tbr = acum.ticks_bloqueados / robot_ticks * 100 if robot_ticks > 0 else 0.0
 
     return KPISet(TSP=tsp, TPCP=tpcp, MTRP=mtrp, IOG=iog, TR=tr, TI=ti, TBR=tbr)

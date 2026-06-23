@@ -99,16 +99,21 @@ def procesar_nocturno(
         acum.ticks_ingreso += 1
         acum.total_desplazamientos += 1
 
+        # Robot 1×2: la reposición nocturna es deliberadamente simple (fuera de
+        # alcance la coordinación inteligente). El robot NO se reubica sobre la
+        # columna (evita solapar footprints 1×2 sin gestión de colisiones): se
+        # mantiene en su posición y solo marca REPONIENDO, preservando orientación.
         robot_actualizado = Robot(
             id=robot.id,
-            x=x, y=y, z=z,
+            x=robot.x, y=robot.y, z=0,
             estado=RobotEstado.REPONIENDO,
             carga_id=None,
+            orientacion=robot.orientacion,
         )
         robots_actualizados.append(robot_actualizado)
 
         eventos.append({
-            "tipo": "movimiento",
+            "tipo": "caja_ingresada_por",
             "robot_id": robot.id,
             "x": x, "y": y, "z": z,
             "modo": ModoTurno.NOCTURNO.value,
@@ -124,14 +129,14 @@ def procesar_nocturno(
 
 
 def _primera_celda_libre(grilla: Grilla) -> tuple[int, int, int] | None:
-    """Retorna la primera celda (x,y,z) vacía, recorriendo columnas de menor z.
-    Prioriza llenar desde abajo (z=0) para mantener densidad baja en la parte
-    superior (facilita acceso futuro)."""
+    """Retorna la primera celda interior (x,y,z) vacía, recorriendo columnas de
+    menor z. Prioriza llenar desde abajo (z=0). El anillo de tránsito (borde) se
+    excluye: solo las columnas almacenables [1..gx]×[1..gy] reciben cajas."""
     gx = grilla.config.grilla.x
     gy = grilla.config.grilla.y
 
-    for x in range(gx):
-        for y in range(gy):
+    for x in range(1, gx + 1):
+        for y in range(1, gy + 1):
             libres = grilla.celdas_libres_en_columna(x, y)
             if libres:
                 return (x, y, libres[0])  # z más bajo disponible
