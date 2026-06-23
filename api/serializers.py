@@ -27,12 +27,21 @@ MODO_TO_M1: dict[ModoTurno, str] = {
 }
 MODO_FROM_M1: dict[str, ModoTurno] = {v: k for k, v in MODO_TO_M1.items()}
 
-# PoliticaPicking (M2) <-> PickingPolicy (M1)
-POLITICA_TO_M1: dict[PoliticaPicking, str] = {
-    PoliticaPicking.FIFO: "FIFO",
-    PoliticaPicking.PRIORIDAD_POSICION: "PRIORIDAD_POSICION",
+# PoliticaPicking (M2) <-> PickingPolicy (M1) — resolucion dinamica para plugins
+def politica_to_m1(politica: str) -> str:
+    return politica.upper()
+
+def politica_from_m1(m1_name: str) -> str | None:
+    from motor.politicas import POLITICAS
+    candidate = m1_name.lower()
+    return candidate if candidate in POLITICAS else None
+
+# Aliases para retrocompatibilidad con tests existentes
+POLITICA_TO_M1: dict[str, str] = {
+    "fifo": "FIFO",
+    "prioridad_posicion": "PRIORIDAD_POSICION",
 }
-POLITICA_FROM_M1: dict[str, PoliticaPicking] = {v: k for k, v in POLITICA_TO_M1.items()}
+POLITICA_FROM_M1: dict[str, str] = {v: k for k, v in POLITICA_TO_M1.items()}
 
 # RobotEstado (M2, 7 estados) -> RobotState (M1, 5 estados)
 ROBOT_ESTADO_TO_M1: dict[RobotEstado, str] = {
@@ -113,7 +122,7 @@ def snapshot_to_payload(snapshot: StateSnapshot, status: str, velocidad: int) ->
         "type": "tick",
         "tick": snapshot.tick,
         "mode": MODO_TO_M1[snapshot.modo],
-        "policy": POLITICA_TO_M1[snapshot.politica],
+        "policy": politica_to_m1(snapshot.politica),
         "status": status,
         "velocidad": velocidad,
         "grid": grid,

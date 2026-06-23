@@ -126,7 +126,7 @@ def _timestamp() -> str:
 def ejecutar_sesion(
     config_path: str | Path,
     ola_path: str | Path,
-    politica: PoliticaPicking,
+    politica: str,
     output_dir: str | Path = OUTPUT_DIR,
     session_name: str | None = None,
     seed: int = 42,
@@ -144,7 +144,7 @@ def ejecutar_sesion(
     output.mkdir(parents=True, exist_ok=True)
 
     if session_name is None:
-        session_name = f"{politica.value}_s{seed}"
+        session_name = f"{politica}_s{seed}"
 
     # --- Cargar datos ---
     config_result = load_config(config_path)
@@ -172,7 +172,7 @@ def ejecutar_sesion(
     if random_ola:
         meta = ExecutionMetadata(
             nombre_ejecucion=session_name, semilla=seed,
-            modo="diurno", politica=politica.value,
+            modo="diurno", politica=politica,
             config_path=str(config_path), data_path="random",
             config_hash=file_hash(config_path), data_hash=f"random_seed_{seed}",
         )
@@ -198,7 +198,7 @@ def ejecutar_sesion(
         print(f"  Cajas iniciales: {sim._grilla.total_cajas}")
         print(f"  Robots: {n_robots}")
         print(f"  Pedidos: {n_pedidos}" + (" (aleatorios)" if random_ola else ""))
-        print(f"  Política: {politica.value}")
+        print(f"  Política: {politica}")
         print(f"  Semilla: {seed}")
         print()
 
@@ -250,7 +250,7 @@ def ejecutar_sesion(
         "pedidos_completados": len(snap.pedidos.completados),
         "pedidos_totales": len(snap.pedidos.cola) + len(snap.pedidos.completados),
         "KPIs": snap.kpis.as_dict(),
-        "politica": politica.value,
+        "politica": politica,
         "seed": seed,
         "tiempo_seg": elapsed,
         "output_dir": str(output),
@@ -359,7 +359,7 @@ def main(argv: list[str] | None = None) -> int:
         print()
         res_a = ejecutar_sesion(
             args.config, args.ola,
-            PoliticaPicking.FIFO,
+            "fifo",
             output_dir=args.output,
             session_name="fifo_s75",
             seed=args.seed,
@@ -377,7 +377,7 @@ def main(argv: list[str] | None = None) -> int:
         print()
         res_b = ejecutar_sesion(
             args.config, args.ola,
-            PoliticaPicking.PRIORIDAD_POSICION,
+            "prioridad_posicion",
             output_dir=args.output,
             session_name="prioridad_s90",
             seed=args.seed,
@@ -396,7 +396,7 @@ def main(argv: list[str] | None = None) -> int:
         print()
         print("  Demo completada. Revisar output/ para resultados.")
     else:
-        politica = PoliticaPicking.FIFO if args.policy == "fifo" else PoliticaPicking.PRIORIDAD_POSICION
+        politica = args.policy
         ejecutar_sesion(
             args.config, args.ola,
             politica,

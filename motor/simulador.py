@@ -212,21 +212,34 @@ class AutoStoreSimulator:
         return self.total_ola > 0 and len(self.pedidos_completados) >= self.total_ola
 
     def ha_terminado(self) -> bool:
-        """Sesión terminada cuando se completa el 100% de la ola, o bien cuando
-        no quedan pedidos pendientes ni robots activos (fallback para olas con
-        pedidos insatisfacibles)."""
+        """Sesión terminada.
+
+        - Nocturno (ingreso): cuando no quedan cajas por reponer en la cola, ni
+          tareas de ingreso activas, y todos los robots están inactivos.
+        - Diurno (picking): cuando se completa el 100% de la ola, o como fallback
+          cuando no quedan pedidos pendientes ni robots activos (ola insatisfacible).
+        """
+        todos_inactivos = all(
+            r.estado == RobotEstado.INACTIVO for r in self.robots.values()
+        )
+        if self.modo == ModoTurno.NOCTURNO:
+            tareas_ingreso = (
+                self._desp_nocturno._tareas if self._desp_nocturno is not None else {}
+            )
+            return (
+                len(self.cola_reposicion) == 0
+                and not tareas_ingreso
+                and todos_inactivos
+            )
         if self.ola_completa():
             return True
-        return (
-            len(self.pedidos_cola) == 0
-            and all(r.estado == RobotEstado.INACTIVO for r in self.robots.values())
-        )
+        return len(self.pedidos_cola) == 0 and todos_inactivos
 
     # ------------------------------------------------------------------
     # Procesamiento por turno
     # ------------------------------------------------------------------
 
-    def _procesar_turno_diurno(self, politica: PoliticaPicking) -> None:
+    def _procesar_turno_diurno(self, politica: str) -> None:
         """Delega en motor.despachador (Manuel — T-12, T-15, T-16, T-17).
 
         Convenciones de delta (acuerdos con Martín):

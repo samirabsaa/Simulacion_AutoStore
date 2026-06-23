@@ -7,7 +7,7 @@ export interface GridConfig {
   numRobots:        number;
   occupancyPct:     number;
   mode:             SimMode;
-  policy:           PickingPolicy;
+  policy:           string;
   sessionName?:     string;
   semilla?:         number;
   pedidosDemandados?: number;

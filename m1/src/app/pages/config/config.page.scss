@@ -559,4 +559,23 @@
 
     p { margin: 0; }
   }
+
+  // ── Policy feedback ──────────────────────────────────────────────────
+  &__policy-msg {
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+
+    &--ok {
+      background: var(--status-online-bg, #e6f9ed);
+      border: 1px solid var(--status-online-border, #34c759);
+      color: var(--status-online-text, #1a7f37);
+    }
+
+    &--error {
+      background: var(--brand-tint, #fff0f0);
+      border: 1px solid var(--brand, #ff3b30);
+      color: var(--brand, #d32f2f);
+    }
+  }
 }

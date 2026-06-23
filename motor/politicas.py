@@ -74,13 +74,28 @@ def prioridad_posicion(
 # Registro — el despachador accede a la función via este dict
 # ------------------------------------------------------------------
 
-POLITICAS: dict[PoliticaPicking, Selector] = {
-    PoliticaPicking.FIFO: fifo,
-    PoliticaPicking.PRIORIDAD_POSICION: prioridad_posicion,
+POLITICAS: dict[str, Selector] = {
+    "fifo": fifo,
+    "prioridad_posicion": prioridad_posicion,
 }
 
 
-def get_politica(politica: PoliticaPicking) -> Selector:
+BUILTIN_KEYS = frozenset({"fifo", "prioridad_posicion"})
+
+
+def register_politica(nombre: str, fn: Selector) -> None:
+    """Registra una politica externa. Sobreescribe si ya existe (excepto built-ins)."""
+    if nombre in BUILTIN_KEYS:
+        raise ValueError(f"No se puede sobreescribir la politica built-in '{nombre}'")
+    POLITICAS[nombre] = fn
+
+
+def list_politicas() -> list[str]:
+    """Retorna los nombres de todas las politicas disponibles (built-in + plugins)."""
+    return sorted(POLITICAS.keys())
+
+
+def get_politica(politica: str) -> Selector:
     """Retorna la función de política activa. Lanza KeyError si el valor
-    no está registrado (en la práctica no debería ocurrir con los enums)."""
+    no está registrado."""
     return POLITICAS[politica]

@@ -139,7 +139,7 @@ class Despachador:
         self,
         robots: dict[int, Robot],
         pedidos_cola: list[Pedido],
-        politica: PoliticaPicking,
+        politica: str,
         acum: "Acumuladores",
     ) -> tuple[
         list[Robot],

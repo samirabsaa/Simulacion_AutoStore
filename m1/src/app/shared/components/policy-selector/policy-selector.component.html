@@ -18,6 +18,21 @@
           <p>Distancia Manhattan</p>
         </ion-label>
       </ion-item>
+      @for (cp of customPolicies; track cp.name) {
+        <ion-item lines="none">
+          <ion-radio [value]="cp.name" slot="start"></ion-radio>
+          <ion-label>
+            <strong>{{ cp.label }}</strong>
+            <p>Política externa</p>
+          </ion-label>
+        </ion-item>
+      }
     </ion-radio-group>
+    <ion-item lines="none" class="policy-selector__load-item" button (click)="onLoadClick()">
+      <ion-icon name="add-circle-outline" slot="start" class="policy-selector__add-icon"></ion-icon>
+      <ion-label color="primary">
+        <strong>Cargar política externa...</strong>
+      </ion-label>
+    </ion-item>
   </ion-card-content>
 </ion-card>

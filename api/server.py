@@ -28,10 +28,11 @@ from bus_persistencia.bus.state_bus import StateBus
 from bus_persistencia.models.state import Config, GrillaDimensions
 from bus_persistencia.persistence.ola_loader import load_ola
 from bus_persistencia.persistence.reposicion_loader import load_reposicion
+from bus_persistencia.persistence.report_generator import generate_report
 from bus_persistencia.persistence.validation import ValidationResult
 
 from api.loop_worker import SimulationLoop
-from api.serializers import MODO_FROM_M1, POLITICA_FROM_M1, snapshot_to_payload
+from api.serializers import MODO_FROM_M1, politica_from_m1, snapshot_to_payload
 
 bus = StateBus()
 _websockets: set[WebSocket] = set()
@@ -56,13 +57,18 @@ async def _send_safe(ws: WebSocket, payload: dict[str, Any]) -> None:
         _websockets.discard(ws)
 
 
-loop = SimulationLoop(bus, on_tick=_broadcast)
+loop = SimulationLoop(bus, on_tick=_broadcast, output_dir=OUTPUT_DIR)
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     global _main_loop
     _main_loop = asyncio.get_running_loop()
+    import logging
+    from motor.plugin_loader import load_plugins
+    loaded = load_plugins()
+    if loaded:
+        logging.getLogger(__name__).info("Plugins cargados: %s", loaded)
     yield
 
 
@@ -129,19 +135,26 @@ def post_config(cfg: GridConfigDTO) -> dict[str, Any]:
         robots_oeste=cfg.robots_oeste or 0,
     )
     modo = MODO_FROM_M1.get(cfg.mode.upper())
-    politica = POLITICA_FROM_M1.get(cfg.policy.upper())
+    politica = politica_from_m1(cfg.policy)
     loop.configurar(config, seed=cfg.semilla, modo=modo, politica=politica,
-                    pedidos_demandados=cfg.pedidos_demandados)
+                    pedidos_demandados=cfg.pedidos_demandados,
+                    session_name=cfg.session_name)
     return {"ok": True}
 
 
 @app.post("/policy")
 def post_policy(body: PolicyDTO) -> dict[str, Any]:
-    politica = POLITICA_FROM_M1.get(body.policy.upper())
+    politica = politica_from_m1(body.policy)
     if politica is None:
         raise HTTPException(status_code=400, detail=f"Política desconocida: {body.policy!r}")
     loop.set_politica(politica)
     return {"ok": True}
+
+
+@app.get("/policies")
+def get_policies() -> dict[str, Any]:
+    from motor.politicas import list_politicas
+    return {"policies": list_politicas()}
 
 
 @app.post("/control/play")
@@ -184,6 +197,24 @@ async def ws_state(websocket: WebSocket) -> None:
         pass
     finally:
         _websockets.discard(websocket)
+
+
+PLUGINS_DIR = Path(__file__).resolve().parents[1] / "plugins" / "politicas"
+
+
+@app.post("/api/upload/policy")
+async def upload_policy(file: UploadFile) -> dict[str, Any]:
+    if not file.filename or not file.filename.endswith(".py"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un .py")
+    contents = await file.read()
+    PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
+    dest = PLUGINS_DIR / file.filename
+    dest.write_bytes(contents)
+    from motor.plugin_loader import validate_and_load_file
+    name, error = validate_and_load_file(dest)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    return {"ok": True, "policy_name": name}
 
 
 @app.post("/api/upload/ola")
@@ -232,9 +263,20 @@ def demo_load_ola(name: str) -> dict[str, Any]:
 
 @app.get("/report/comparativo")
 def get_report_comparativo():
+    """Genera y descarga reporte_comp.csv comparando las DOS últimas ejecuciones
+    terminadas (KPI | Ejecución A | Ejecución B | Δ%)."""
+    if len(loop.finished_runs) < 2:
+        raise HTTPException(
+            409,
+            "Se requieren 2 ejecuciones terminadas para el reporte comparativo. "
+            f"Hay {len(loop.finished_runs)}. Corre dos simulaciones completas.",
+        )
+    (nombre_a, kpis_a), (nombre_b, kpis_b) = loop.finished_runs[-2], loop.finished_runs[-1]
+    # Desambiguar si ambas corridas tienen el mismo nombre de ejecución.
+    if nombre_a == nombre_b:
+        nombre_a, nombre_b = f"{nombre_a}_A", f"{nombre_b}_B"
     path = OUTPUT_DIR / "reporte_comp.csv"
-    if not path.exists():
-        raise HTTPException(404, "reporte_comp.csv no existe aún")
+    generate_report(nombre_a, nombre_b, path, kpis_a=kpis_a, kpis_b=kpis_b)
     return FileResponse(
         path,
         media_type="text/csv",
