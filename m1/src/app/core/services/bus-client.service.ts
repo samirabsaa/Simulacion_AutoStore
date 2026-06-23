@@ -69,6 +69,34 @@ export const FORUS_DEFAULTS = {
   robotsOeste: 3,
 };
 
+export const DEMO1_CONFIG = {
+  grid: { x: 12, y: 10, z: 5 },
+  numRobots: 8,
+  ocupacionInicial: 75,
+  pedidosDemandados: 30,
+  robotsNorte: 2,
+  robotsEste: 3,
+  robotsOeste: 3,
+  policy: PickingPolicy.FIFO,
+  semilla: 20260601,
+  nombreEjecucion: 'Demo_FIFO_75',
+  olaName: 'demo1',
+};
+
+export const DEMO2_CONFIG = {
+  grid: { x: 12, y: 10, z: 5 },
+  numRobots: 8,
+  ocupacionInicial: 90,
+  pedidosDemandados: 40,
+  robotsNorte: 2,
+  robotsEste: 3,
+  robotsOeste: 3,
+  policy: PickingPolicy.PRIORITY_POSITION,
+  semilla: 20260601,
+  nombreEjecucion: 'Demo_Prioridad_90',
+  olaName: 'demo2',
+};
+
 const EMPTY_KPIS: KpisComputed = {
   TSP: 0, TPCP: 0, MTRP: 0, IOG: 0, TR: 0, TI: 0, TBR: 0,
   completados: 0, capacidad: 600, cajasPresentes: 0,
@@ -252,6 +280,31 @@ export class BusClientService implements OnDestroy {
       robotsNorte:       FORUS_DEFAULTS.robotsNorte,
       robotsEste:        FORUS_DEFAULTS.robotsEste,
       robotsOeste:       FORUS_DEFAULTS.robotsOeste,
+    });
+  }
+
+  /** Carga un demostrador: configura parámetros y ola predefinidos. */
+  cargarDemo(demo: typeof DEMO1_CONFIG | typeof DEMO2_CONFIG): void {
+    this.patchLocal({
+      grid:              { ...demo.grid },
+      numRobots:         demo.numRobots,
+      ocupacionInicial:  demo.ocupacionInicial,
+      pedidosDemandados: demo.pedidosDemandados,
+      robotsNorte:       demo.robotsNorte,
+      robotsEste:        demo.robotsEste,
+      robotsOeste:       demo.robotsOeste,
+      policy:            demo.policy,
+      semilla:           demo.semilla,
+      nombreEjecucion:   demo.nombreEjecucion,
+      archivoOla:        'no_cargado',
+    });
+    this.simApi.loadDemoOla(demo.olaName).subscribe({
+      next: (res) => {
+        this.patchLocal({ archivoOla: res.valid ? 'valido' : 'errores' });
+      },
+      error: () => {
+        this.patchLocal({ archivoOla: 'errores' });
+      },
     });
   }
 
