@@ -172,6 +172,20 @@ class Despachador:
         # Copia mutable del estado de robots para este tick
         robots_estado: dict[int, Robot] = dict(robots)
 
+        # Acumula robots cuyo estado cambia este tick (delta para el bus).
+        robots_modificados: list[Robot] = []
+
+        # Paso 0: normalizar "zombies" — un robot sin tarea y sin carga que quedó
+        # en un estado no-INACTIVO (p.ej. un receptor de handoff que hizo timeout
+        # estando BLOQUEADO) debe volver a INACTIVO para poder recibir tareas o ser
+        # reservado como receptor. Sin esto, queda inerte y provoca livelock.
+        for rid, r in list(robots_estado.items()):
+            if (rid not in self._tareas and rid not in self._receptores_reservados
+                    and r.carga_id is None and r.estado != RobotEstado.INACTIVO):
+                r2 = _cambiar_estado(r, RobotEstado.INACTIVO)
+                robots_estado[rid] = r2
+                robots_modificados.append(r2)
+
         # Paso 1: asignar tareas a robots INACTIVOS sin tarea
         politica_fn = POLITICAS[politica]
         pedidos_disponibles = [
@@ -200,7 +214,6 @@ class Despachador:
         # Paso 2.4: Mente Colmena — handoff de orientación (Feature 4).
         # Un robot cargado y mal orientado en su estación cede la carga a un
         # vecino ocioso ya orientado, evitando el costo de rotación.
-        robots_modificados: list[Robot] = []
         if self.usa_estaciones:
             self._handoff_prepass(robots_estado, robots_modificados, eventos)
 
@@ -215,7 +228,7 @@ class Despachador:
             tarea = self._tareas.get(robot.id)
             if tarea is None or robot.estado != RobotEstado.BLOQUEADO:
                 continue
-            if tarea.fase == "mover_a_objetivo" and tarea.ruta_entrada:
+            if tarea.fase in ("mover_a_objetivo", "ir_a_recibir") and tarea.ruta_entrada:
                 siguiente = tarea.ruta_entrada[0]
             elif tarea.fase == "mover_a_puerto" and tarea.ruta_salida:
                 siguiente = tarea.ruta_salida[0]
