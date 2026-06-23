@@ -103,7 +103,7 @@ export class KpiChartComponent implements AfterViewInit, OnDestroy {
           legend: { display: true, labels: { color: '#d1d5db' } },
           tooltip: {
             callbacks: {
-              label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}${m.unit}`,
+              label: (ctx: any) => `${ctx.dataset.label}: ${ctx.parsed.y}${m.unit}`,
             },
           },
         },
