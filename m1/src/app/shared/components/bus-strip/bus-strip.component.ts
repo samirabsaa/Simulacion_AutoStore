@@ -20,7 +20,11 @@ export class BusStripComponent {
   }
 
   get politicaLabel(): string {
-    return this.bus?.policy === PickingPolicy.FIFO ? 'FIFO' : 'Prioridad Posición';
+    switch (this.bus?.policy) {
+      case PickingPolicy.FIFO: return 'FIFO';
+      case PickingPolicy.PRIORITY_POSITION: return 'Prioridad Posición';
+      default: return this.bus?.policy ?? '-';
+    }
   }
 
   get grillaLabel(): string {
