@@ -30,7 +30,7 @@ from bus_persistencia.models.state import (
 )
 from motor.grilla import Grilla
 from motor.kpis import Acumuladores
-from motor.modos import procesar_nocturno
+from motor.modos import DespachadorNocturno, procesar_nocturno
 
 # Límites de rendimiento (T-23)
 _LIMIT_CELDAS = 20 * 20 * 5
@@ -47,6 +47,7 @@ class AutoStoreSimulator:
         # Módulos de motor — se crean en inicializar_desde_bus()
         self._grilla: Grilla | None = None
         self._despachador = None   # motor.despachador.Despachador (Manuel)
+        self._desp_nocturno: DespachadorNocturno | None = None  # ingreso nocturno
 
         # Estado interno
         self.robots: dict[int, Robot] = {}
@@ -258,11 +259,16 @@ class AutoStoreSimulator:
         self._eventos_pendientes.extend(eventos)
 
     def _procesar_turno_nocturno(self) -> None:
-        """Reposición nocturna — implementado en motor.modos (T-19)."""
+        """Ingreso nocturno por conveyors del Norte: los robots NORTE recogen cajas
+        de las conveyors y las almacenan (motor.modos.DespachadorNocturno)."""
         if self._grilla is None:
             raise RuntimeError("Llamar inicializar_desde_bus() primero.")
 
-        robots_upd, g_delta, g_remove, eventos = procesar_nocturno(
+        if self._desp_nocturno is None:
+            self._desp_nocturno = DespachadorNocturno()
+
+        # El dispatcher consume de `cola_reposicion` directamente (pop por asignación).
+        robots_upd, g_delta, g_remove, eventos = self._desp_nocturno.tick(
             self._grilla,
             self.robots,
             self.cola_reposicion,
@@ -276,11 +282,6 @@ class AutoStoreSimulator:
         self._grilla_delta.extend(g_delta)
         self._grilla_remove.extend(g_remove)
         self._eventos_pendientes.extend(eventos)
-
-        # Consumir las cajas procesadas de la cola de reposición
-        n = self._acum.cajas_ingresadas
-        if n > 0 and self.cola_reposicion:
-            self.cola_reposicion = self.cola_reposicion[n:]
 
     def _resolver_colisiones(self) -> None:
         """Cesión de paso: el despachador ya maneja los bloqueos y emite eventos.
