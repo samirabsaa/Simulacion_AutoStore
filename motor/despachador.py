@@ -74,6 +74,13 @@ class Tarea:
     ultimo_progreso_medido: int = field(default=0)   # progreso neto medido en el último tick
     ticks_sin_progreso: int = field(default=0)       # alimenta el StagnationDetector
     escort_asignado: Escort | None = field(default=None)  # columna-escort de descanso asignada
+    # --- Colaboración NORTE→E/O (Fase 5) ---
+    # Un robot NORTE no entrega en estación: tras recuperar, ESPERA a que un robot
+    # E/O ocioso se le acerque y reciba la caja. `receptor_handoff` es el E/O
+    # reservado para recibir; `emisor_handoff` (en la tarea del receptor) es el
+    # NORTE del que recibirá.
+    receptor_handoff: int | None = field(default=None)
+    emisor_handoff: int | None = field(default=None)
 
 
 # ------------------------------------------------------------------
@@ -114,6 +121,14 @@ class Despachador:
         # refrescadas antes del Paso 3 y leídas por _fase_excavar.
         self._cols_protegidas: set[tuple[int, int]] = set()
         self._cols_reservadas: set[tuple[int, int]] = set()
+
+        # --- Colaboración NORTE→E/O (Fase 5) ---
+        # E/O ociosos reservados como receptores de handoff (no toman pedidos).
+        self._receptores_reservados: set[int] = set()
+        # norte_id -> eo_id reservado para recibir su caja.
+        self._handoff_pares: dict[int, int] = {}
+        # norte_id -> ticks que lleva esperando que el receptor llegue (timeout).
+        self._handoff_edad: dict[int, int] = {}
 
     @property
     def usa_estaciones(self) -> bool:
@@ -165,9 +180,8 @@ class Despachador:
         ]
         for robot in robots_estado.values():
             if robot.estado == RobotEstado.INACTIVO and robot.id not in self._tareas:
-                # Robots NORTE no entregan en estación: por ahora no reciben tareas
-                # de picking (colaboran vía handoff — Fase 5). Solo E/O reciben pedidos.
-                if robot.orientacion == Orientacion.NORTE:
+                # Los E/O reservados como receptores de handoff no toman pedidos.
+                if robot.id in self._receptores_reservados:
                     continue
                 pedido = politica_fn(pedidos_disponibles, self.grilla, self.grilla.puertos)
                 if pedido is None:
@@ -189,6 +203,10 @@ class Despachador:
         robots_modificados: list[Robot] = []
         if self.usa_estaciones:
             self._handoff_prepass(robots_estado, robots_modificados, eventos)
+
+        # Paso 2.4b: Colaboración NORTE→E/O (Fase 5) — los robots NORTE cargados
+        # ceden su caja a un robot E/O ocioso que la lleva a su estación.
+        self._colaboracion_norte_prepass(robots_estado, robots_modificados, eventos)
 
         # Paso 2.5: Ceder paso — INACTIVOS se apartan si bloquean.
         #           Soporta cascada de 2 niveles: si el bloqueador directo
@@ -356,22 +374,31 @@ class Despachador:
         if caja is None:
             return None
 
-        # Estación de entrega compatible con la orientación del robot (E/O).
+        # Cuerpo-objetivo de pick: la punta debe caer sobre la columna de la caja.
+        cuerpo_pick = cuerpo_para_punta_en(caja.x, caja.y, robot.orientacion)
+        ruta_entrada = _ruta_xy((robot.x, robot.y), cuerpo_pick)
+        self._cajas_reservadas.add((caja.x, caja.y, caja.z))
+
+        if robot.orientacion == Orientacion.NORTE:
+            # NORTE no entrega en estación: tras recuperar, esperará el handoff a
+            # un robot E/O que lleve la caja a su estación (Fase 5).
+            return Tarea(
+                pedido=pedido,
+                caja_objetivo=caja,
+                ruta_entrada=ruta_entrada,
+                ruta_salida=[],
+                puerto=cuerpo_pick,
+                estacion=None,
+            )
+
+        # E/O: estación de entrega compatible con la orientación del robot.
         estacion = self.grilla.estacion_compatible_mas_cercana(
             caja.x, caja.y, robot.orientacion
         )
         if estacion is None:
-            return None  # sin estación compatible (p.ej. NORTE): no se asigna aquí
-
-        # Cuerpo-objetivo de pick: la punta debe caer sobre la columna de la caja.
-        cuerpo_pick = cuerpo_para_punta_en(caja.x, caja.y, robot.orientacion)
-        # Cuerpo-objetivo de entrega: la punta debe caer sobre la celda-estación.
+            return None
         cuerpo_entrega = cuerpo_para_punta_en(estacion.x, estacion.y, robot.orientacion)
-
-        ruta_entrada = _ruta_xy((robot.x, robot.y), cuerpo_pick)
         ruta_salida = _ruta_xy(cuerpo_pick, cuerpo_entrega)
-
-        self._cajas_reservadas.add((caja.x, caja.y, caja.z))
 
         return Tarea(
             pedido=pedido,
@@ -409,6 +436,11 @@ class Despachador:
             return self._fase_recuperar(robot, tarea, acum)
         elif tarea.fase == "mover_a_puerto":
             return self._fase_mover_a_puerto(robot, tarea, posiciones_actuales, acum)
+        elif tarea.fase == "ir_a_recibir":
+            return self._fase_ir_a_recibir(robot, tarea, posiciones_actuales, acum)
+        elif tarea.fase == "esperar_handoff":
+            # NORTE cargado: espera quieto a que el receptor E/O llegue y reciba.
+            return robot, [], [], None, []
         elif tarea.fase == "entregar":
             return self._fase_entregar(robot, tarea, acum)
         # Estado desconocido: no hacer nada
@@ -542,9 +574,14 @@ class Despachador:
         acum.cajas_recuperadas += 1
         acum.total_desplazamientos += 1
 
-        # Actualizar ruta_salida desde la posición actual del robot
-        tarea.ruta_salida = _ruta_xy((robot.x, robot.y), tarea.puerto)
-        tarea.fase = "mover_a_puerto"
+        if tarea.estacion is None:
+            # NORTE: no entrega en estación. Queda cargado esperando el handoff a
+            # un robot E/O (lo gestiona _colaboracion_norte_prepass).
+            tarea.fase = "esperar_handoff"
+        else:
+            # E/O: ruta hacia el cuerpo de entrega de su estación compatible.
+            tarea.ruta_salida = _ruta_xy((robot.x, robot.y), tarea.puerto)
+            tarea.fase = "mover_a_puerto"
 
         nuevo = Robot(id=robot.id, x=robot.x, y=robot.y, z=robot.z,
                       estado=RobotEstado.RECUPERANDO, carga_id=caja.id_caja,
@@ -598,6 +635,25 @@ class Despachador:
         acum.total_desplazamientos += 1
         nuevo = Robot(id=robot.id, x=siguiente[0], y=siguiente[1], z=robot.z,
                       estado=RobotEstado.ENTREGANDO, carga_id=robot.carga_id,
+                      orientacion=robot.orientacion)
+        return nuevo, [], [], None, [_ev_movimiento(nuevo)]
+
+    def _fase_ir_a_recibir(
+        self, robot: Robot, tarea: Tarea, posiciones_actuales: dict[tuple[int, int], int], acum: "Acumuladores",
+    ) -> _AvanceResult:
+        """El receptor E/O se desplaza hacia el robot NORTE emisor. Cuando agota
+        la ruta, espera adyacente a que el prepass de colaboración haga el transfer."""
+        if not tarea.ruta_entrada:
+            return robot, [], [], None, []  # adyacente: espera el transfer
+        siguiente = tarea.ruta_entrada[0]
+        if not _footprint_libre(siguiente, robot.orientacion, robot.id, posiciones_actuales, self.grilla):
+            nuevo = _cambiar_estado(robot, RobotEstado.BLOQUEADO)
+            acum.ticks_bloqueados += 1
+            return nuevo, [], [], None, [_ev_bloqueo(robot)]
+        tarea.ruta_entrada.pop(0)
+        acum.total_desplazamientos += 1
+        nuevo = Robot(id=robot.id, x=siguiente[0], y=siguiente[1], z=robot.z,
+                      estado=RobotEstado.DESPLAZANDOSE, carga_id=None,
                       orientacion=robot.orientacion)
         return nuevo, [], [], None, [_ev_movimiento(nuevo)]
 
@@ -723,6 +779,175 @@ class Despachador:
                 "tipo": "handoff", "de_robot": emisor.id, "a_robot": receptor.id,
                 "id_caja": emisor.carga_id, "estacion": est.id,
             })
+
+    # ------------------------------------------------------------------
+    # Colaboración NORTE → E/O (Fase 5)
+    # ------------------------------------------------------------------
+
+    _UMBRAL_HANDOFF_TIMEOUT = 40  # ticks antes de soltar un receptor que no llega
+
+    def _colaboracion_norte_prepass(
+        self,
+        robots_estado: dict[int, Robot],
+        robots_modificados: list[Robot],
+        eventos: list[dict],
+    ) -> None:
+        """Coordina el traspaso de cajas de robots NORTE (que no entregan en
+        estación) a robots E/O ociosos que las llevan a su estación compatible.
+
+        Por cada NORTE cargado y esperando: reserva el E/O ocioso más cercano y lo
+        encamina hacia él; cuando el receptor llega adyacente, transfiere la caja.
+        Determinista: itera emisores por id ascendente."""
+        # Liberar reservas obsoletas (emisor que ya no espera o receptor inválido).
+        for norte_id in list(self._handoff_pares):
+            eo_id = self._handoff_pares[norte_id]
+            ntarea = self._tareas.get(norte_id)
+            eotarea = self._tareas.get(eo_id)
+            valido = (
+                ntarea is not None and ntarea.fase == "esperar_handoff"
+                and eotarea is not None and eotarea.fase == "ir_a_recibir"
+            )
+            if not valido:
+                self._liberar_reserva_handoff(norte_id)
+
+        emisores = sorted(
+            (r for r in robots_estado.values()
+             if r.orientacion == Orientacion.NORTE and r.carga_id is not None
+             and self._tareas.get(r.id) is not None
+             and self._tareas[r.id].fase == "esperar_handoff"),
+            key=lambda r: r.id,
+        )
+        for norte in emisores:
+            eo_id = self._handoff_pares.get(norte.id)
+            if eo_id is None:
+                eo = self._reservar_receptor(norte, robots_estado, robots_modificados)
+                if eo is None:
+                    continue
+                eo_id = eo.id
+            else:
+                # Timeout: si el receptor no llega, soltarlo y reintentar luego.
+                self._handoff_edad[norte.id] = self._handoff_edad.get(norte.id, 0) + 1
+                if self._handoff_edad[norte.id] > self._UMBRAL_HANDOFF_TIMEOUT:
+                    self._liberar_reserva_handoff(norte.id)
+                    continue
+
+            eo = robots_estado.get(eo_id)
+            if eo is None:
+                continue
+            if distancia_manhattan((eo.x, eo.y), (norte.x, norte.y)) <= 2:
+                self._transferir_handoff(norte, eo, robots_estado, robots_modificados, eventos)
+            else:
+                # Aún no llega: si agotó su ruta (o el emisor se movió), recalcular
+                # el encuentro hacia la posición actual del NORTE.
+                eotarea = self._tareas.get(eo_id)
+                if eotarea is not None and eotarea.fase == "ir_a_recibir" and not eotarea.ruta_entrada:
+                    objetivo = self._celda_rendezvous(eo, norte)
+                    if objetivo is not None and objetivo != (eo.x, eo.y):
+                        eotarea.ruta_entrada = _ruta_xy((eo.x, eo.y), objetivo)
+
+    def _reservar_receptor(
+        self, norte: Robot, robots_estado: dict[int, Robot], robots_modificados: list[Robot],
+    ) -> Robot | None:
+        """Reserva el robot E/O ocioso más cercano para recibir la caja del NORTE,
+        le crea la tarea `ir_a_recibir` y lo encamina hacia él."""
+        ntarea = self._tareas[norte.id]
+        candidatos = [
+            r for r in robots_estado.values()
+            if r.orientacion in (Orientacion.ESTE, Orientacion.OESTE)
+            and r.estado == RobotEstado.INACTIVO
+            and r.id not in self._tareas
+            and r.id not in self._receptores_reservados
+        ]
+        if not candidatos:
+            return None
+        eo = min(candidatos, key=lambda r: distancia_manhattan((r.x, r.y), (norte.x, norte.y)))
+        objetivo = self._celda_rendezvous(eo, norte)
+        ruta = _ruta_xy((eo.x, eo.y), objetivo) if objetivo else []
+        tarea_eo = Tarea(
+            pedido=ntarea.pedido,
+            caja_objetivo=ntarea.caja_objetivo,
+            ruta_entrada=ruta,
+            ruta_salida=[],
+            puerto=(eo.x, eo.y),
+            estacion=None,
+            fase="ir_a_recibir",
+            emisor_handoff=norte.id,
+        )
+        tarea_eo.tick_inicio = ntarea.tick_inicio
+        self._tareas[eo.id] = tarea_eo
+        self._handoff_pares[norte.id] = eo.id
+        self._handoff_edad[norte.id] = 0
+        self._receptores_reservados.add(eo.id)
+        eo_upd = _cambiar_estado(eo, RobotEstado.DESPLAZANDOSE)
+        robots_estado[eo.id] = eo_upd
+        robots_modificados.append(eo_upd)
+        return eo_upd
+
+    def _celda_rendezvous(self, eo: Robot, norte: Robot) -> tuple[int, int] | None:
+        """Celda-cuerpo adyacente al emisor donde el footprint del receptor cabe en
+        la superficie; la más cercana al receptor."""
+        validas = [
+            c for c in self.grilla.celdas_adyacentes_superficie(norte.x, norte.y)
+            if all(self.grilla.en_superficie(x, y)
+                   for x, y in celdas_desde(c[0], c[1], eo.orientacion))
+        ]
+        if not validas:
+            return None
+        return min(validas, key=lambda c: distancia_manhattan(c, (eo.x, eo.y)))
+
+    def _transferir_handoff(
+        self, norte: Robot, eo: Robot,
+        robots_estado: dict[int, Robot], robots_modificados: list[Robot], eventos: list[dict],
+    ) -> None:
+        """Transfiere la caja del NORTE al receptor E/O: el E/O queda cargado con
+        una tarea de entrega a su estación compatible y el NORTE queda ocioso."""
+        ntarea = self._tareas.get(norte.id)
+        if ntarea is None:
+            return
+        caja = ntarea.caja_objetivo
+        estacion = self.grilla.estacion_compatible_mas_cercana(caja.x, caja.y, eo.orientacion)
+        if estacion is None:
+            return
+        cuerpo_entrega = cuerpo_para_punta_en(estacion.x, estacion.y, eo.orientacion)
+        tarea_eo = Tarea(
+            pedido=ntarea.pedido,
+            caja_objetivo=caja,
+            ruta_entrada=[],
+            ruta_salida=_ruta_xy((eo.x, eo.y), cuerpo_entrega),
+            puerto=cuerpo_entrega,
+            estacion=estacion,
+            fase="mover_a_puerto",
+        )
+        tarea_eo.tick_inicio = ntarea.tick_inicio
+        self._tareas[eo.id] = tarea_eo
+        eo_upd = Robot(id=eo.id, x=eo.x, y=eo.y, z=eo.z,
+                       estado=RobotEstado.RECUPERANDO, carga_id=norte.carga_id,
+                       orientacion=eo.orientacion)
+        robots_estado[eo.id] = eo_upd
+        robots_modificados.append(eo_upd)
+        # NORTE suelta la caja y queda ocioso.
+        del self._tareas[norte.id]
+        self._cajas_reservadas.discard((caja.x, caja.y, caja.z))
+        norte_upd = Robot(id=norte.id, x=norte.x, y=norte.y, z=norte.z,
+                          estado=RobotEstado.INACTIVO, carga_id=None,
+                          orientacion=norte.orientacion)
+        robots_estado[norte.id] = norte_upd
+        robots_modificados.append(norte_upd)
+        self._liberar_reserva_handoff(norte.id)
+        eventos.append({
+            "tipo": "handoff", "de_robot": norte.id, "a_robot": eo.id,
+            "id_caja": norte.carga_id, "estacion": estacion.id,
+        })
+
+    def _liberar_reserva_handoff(self, norte_id: int) -> None:
+        eo_id = self._handoff_pares.pop(norte_id, None)
+        self._handoff_edad.pop(norte_id, None)
+        if eo_id is not None:
+            self._receptores_reservados.discard(eo_id)
+            # Si el receptor sigue solo "yendo a recibir" (no recibió), cancelar.
+            tarea = self._tareas.get(eo_id)
+            if tarea is not None and tarea.fase == "ir_a_recibir":
+                del self._tareas[eo_id]
 
     def _buscar_candidato_handoff(
         self,
