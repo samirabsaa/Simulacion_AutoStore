@@ -45,17 +45,17 @@
 
         <div class="cfg__sliders">
           <div class="cfg__slider-row">
-            <label class="cfg__slider-label">Ancho · X <span class="mono cfg__slider-val">{{ bus.grid.x }}</span></label>
+            <label class="cfg__slider-label">Ancho X <span class="mono cfg__slider-val">{{ bus.grid.x }}</span></label>
             <input type="range" min="4" max="20" [value]="bus.grid.x" (input)="setX($event)" class="cfg__range">
             <div class="cfg__range-limits"><span>4</span><span>20 col</span></div>
           </div>
           <div class="cfg__slider-row">
-            <label class="cfg__slider-label">Fondo · Y <span class="mono cfg__slider-val">{{ bus.grid.y }}</span></label>
+            <label class="cfg__slider-label">Fondo Y <span class="mono cfg__slider-val">{{ bus.grid.y }}</span></label>
             <input type="range" min="4" max="20" [value]="bus.grid.y" (input)="setY($event)" class="cfg__range">
             <div class="cfg__range-limits"><span>4</span><span>20 col</span></div>
           </div>
           <div class="cfg__slider-row">
-            <label class="cfg__slider-label">Altura · Z (niveles) <span class="mono cfg__slider-val">{{ bus.grid.z }}</span></label>
+            <label class="cfg__slider-label">Altura Z (niveles) <span class="mono cfg__slider-val">{{ bus.grid.z }}</span></label>
             <input type="range" min="1" max="10" [value]="bus.grid.z" (input)="setZ($event)" class="cfg__range">
             <div class="cfg__range-limits"><span>1</span><span>10 niv</span></div>
           </div>
@@ -68,9 +68,10 @@
 
       <!-- Flota y carga -->
       <div class="as-card cfg__card">
-        <span class="cfg__card-title">Flota 1×2 y Carga
-          <span class="mono cfg__slider-val">{{ bus.numRobots }} robots</span>
-        </span>
+        <div class="cfg__card-head">
+          <span class="cfg__card-title">Flota 1x2 y Carga</span>
+          <span class="mono cfg__slider-val cfg__robots-count">{{ bus.numRobots }} robots</span>
+        </div>
         <div class="cfg__sliders">
           <div class="cfg__slider-row">
             <label class="cfg__slider-label">▲ Robots NORTE (excavan y colaboran) <span class="mono cfg__slider-val">{{ bus.robotsNorte }}</span></label>
@@ -104,13 +105,13 @@
             <button class="seg-ctrl__btn"
                     [class.seg-ctrl__btn--active]="bus.mode === SimMode.DIURNO"
                     [class.seg-ctrl__btn--day]="bus.mode === SimMode.DIURNO"
-                    (click)="setMode(SimMode.DIURNO)">☀ Diurno · Picking</button>
+                    (click)="setMode(SimMode.DIURNO)">☀ Diurno - Picking</button>
             <button class="seg-ctrl__btn"
                     [class.seg-ctrl__btn--active]="bus.mode !== SimMode.DIURNO"
                     [class.seg-ctrl__btn--night]="bus.mode !== SimMode.DIURNO"
-                    (click)="setMode(SimMode.NOCTURNO)">🌙 Nocturno · Reposición</button>
+                    (click)="setMode(SimMode.NOCTURNO)">🌙 Nocturno - Reposicion</button>
           </div>
-          <p class="cfg__field-hint">Diurno carga ola.csv · Nocturno carga reposicion.csv.</p>
+          <p class="cfg__field-hint">Diurno carga ola.csv, Nocturno carga reposicion.csv.</p>
         </div>
       </div>
 
@@ -142,7 +143,7 @@
 
       <!-- Identificación (T-31) -->
       <div class="as-card cfg__card">
-        <span class="cfg__card-title">Identificación y Reproducibilidad (T-31 · RNF-04)</span>
+        <span class="cfg__card-title">Identificacion y Reproducibilidad</span>
         <div class="cfg__field-group">
           <div class="cfg__field">
             <label class="cfg__field-label">Nombre de la ejecución</label>
@@ -159,7 +160,7 @@
                      [value]="bus.semilla" (input)="setSemilla($event)">
               <button class="cfg__btn-secondary" (click)="randomSemilla()">🎲 Nueva</button>
             </div>
-            <p class="cfg__field-hint">Misma semilla + parámetros = misma ejecución (RNF-04).</p>
+            <p class="cfg__field-hint">Misma semilla + parametros = misma ejecucion.</p>
           </div>
         </div>
       </div>
@@ -188,10 +189,10 @@
         <p class="cfg__field-hint" style="margin:0">Carga parámetros y ola predefinidos para cada demostrador.</p>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:4px">
           <button class="cfg__btn-secondary cfg__btn-sm" (click)="cargarDemo1()">
-            ▶ Demo 1 · FIFO 75%
+            ▶ Demo 1 - FIFO 75%
           </button>
           <button class="cfg__btn-secondary cfg__btn-sm" (click)="cargarDemo2()">
-            ▶ Demo 2 · Prioridad 90%
+            ▶ Demo 2 - Prioridad 90%
           </button>
         </div>
 
@@ -205,7 +206,7 @@
     </div><!-- /RIGHT -->
   </div><!-- /grid -->
 
-  <!-- CSV Validator (T-25 + T-29) -->
+  <!-- CSV Validator -->
   <div>
     <h3 class="cfg__section-title">Carga y validación de la ola de datos</h3>
 
@@ -221,7 +222,7 @@
             <span class="csv__shift-badge"
                   [style.background]="bus.mode === SimMode.DIURNO ? 'var(--shift-day)' : 'var(--shift-night)'"
                   [style.color]="bus.mode === SimMode.DIURNO ? 'var(--text-primary)' : '#fff'">
-              Turno {{ bus.mode === SimMode.DIURNO ? 'Diurno · Picking' : 'Nocturno · Reposición' }}
+              Turno {{ bus.mode === SimMode.DIURNO ? 'Diurno - Picking' : 'Nocturno - Reposicion' }}
             </span>
           </div>
           <p class="csv__cols-hint">Columnas: <span class="mono">{{ csvCols.join(', ') }}</span></p>
