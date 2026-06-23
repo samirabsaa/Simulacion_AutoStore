@@ -58,6 +58,14 @@ class StateBus:
         self._snapshot = self._build_snapshot()
         self._write_latencies_ms: list[float] = []
 
+    def set_session_output(self, output_dir, session_name: str) -> None:
+        """Dirige la bitácora de sesión a `output_dir/sesion_<session_name>.csv`.
+        Permite que `GET /report/sesion` encuentre el archivo (por defecto el bus
+        escribe a `_noop/`, no exportable). Resetea el buffer/header para la corrida."""
+        with self._lock:
+            self._session_logger.reset()
+            self._session_logger.configure(output_dir, session_name)
+
     def set_config(self, config: Config) -> None:
         with self._lock:
             self._config = config

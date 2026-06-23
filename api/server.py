@@ -28,6 +28,7 @@ from bus_persistencia.bus.state_bus import StateBus
 from bus_persistencia.models.state import Config, GrillaDimensions
 from bus_persistencia.persistence.ola_loader import load_ola
 from bus_persistencia.persistence.reposicion_loader import load_reposicion
+from bus_persistencia.persistence.report_generator import generate_report
 from bus_persistencia.persistence.validation import ValidationResult
 
 from api.loop_worker import SimulationLoop
@@ -55,7 +56,7 @@ async def _send_safe(ws: WebSocket, payload: dict[str, Any]) -> None:
         _websockets.discard(ws)
 
 
-loop = SimulationLoop(bus, on_tick=_broadcast)
+loop = SimulationLoop(bus, on_tick=_broadcast, output_dir=OUTPUT_DIR)
 
 
 @asynccontextmanager
@@ -130,7 +131,8 @@ def post_config(cfg: GridConfigDTO) -> dict[str, Any]:
     modo = MODO_FROM_M1.get(cfg.mode.upper())
     politica = POLITICA_FROM_M1.get(cfg.policy.upper())
     loop.configurar(config, seed=cfg.semilla, modo=modo, politica=politica,
-                    pedidos_demandados=cfg.pedidos_demandados)
+                    pedidos_demandados=cfg.pedidos_demandados,
+                    session_name=cfg.session_name)
     return {"ok": True}
 
 
@@ -219,9 +221,20 @@ async def upload_reposicion(file: UploadFile) -> dict[str, Any]:
 
 @app.get("/report/comparativo")
 def get_report_comparativo():
+    """Genera y descarga reporte_comp.csv comparando las DOS últimas ejecuciones
+    terminadas (KPI | Ejecución A | Ejecución B | Δ%)."""
+    if len(loop.finished_runs) < 2:
+        raise HTTPException(
+            409,
+            "Se requieren 2 ejecuciones terminadas para el reporte comparativo. "
+            f"Hay {len(loop.finished_runs)}. Corre dos simulaciones completas.",
+        )
+    (nombre_a, kpis_a), (nombre_b, kpis_b) = loop.finished_runs[-2], loop.finished_runs[-1]
+    # Desambiguar si ambas corridas tienen el mismo nombre de ejecución.
+    if nombre_a == nombre_b:
+        nombre_a, nombre_b = f"{nombre_a}_A", f"{nombre_b}_B"
     path = OUTPUT_DIR / "reporte_comp.csv"
-    if not path.exists():
-        raise HTTPException(404, "reporte_comp.csv no existe aún")
+    generate_report(nombre_a, nombre_b, path, kpis_a=kpis_a, kpis_b=kpis_b)
     return FileResponse(
         path,
         media_type="text/csv",

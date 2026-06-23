@@ -41,17 +41,17 @@
 
         <div class="cfg__sliders">
           <div class="cfg__slider-row">
-            <label class="cfg__slider-label">Ancho — X <span class="mono cfg__slider-val">{{ bus.grid.x }}</span></label>
+            <label class="cfg__slider-label">Ancho · X <span class="mono cfg__slider-val">{{ bus.grid.x }}</span></label>
             <input type="range" min="4" max="20" [value]="bus.grid.x" (input)="setX($event)" class="cfg__range">
             <div class="cfg__range-limits"><span>4</span><span>20 col</span></div>
           </div>
           <div class="cfg__slider-row">
-            <label class="cfg__slider-label">Fondo — Y <span class="mono cfg__slider-val">{{ bus.grid.y }}</span></label>
+            <label class="cfg__slider-label">Fondo · Y <span class="mono cfg__slider-val">{{ bus.grid.y }}</span></label>
             <input type="range" min="4" max="20" [value]="bus.grid.y" (input)="setY($event)" class="cfg__range">
             <div class="cfg__range-limits"><span>4</span><span>20 col</span></div>
           </div>
           <div class="cfg__slider-row">
-            <label class="cfg__slider-label">Altura — Z (niveles) <span class="mono cfg__slider-val">{{ bus.grid.z }}</span></label>
+            <label class="cfg__slider-label">Altura · Z (niveles) <span class="mono cfg__slider-val">{{ bus.grid.z }}</span></label>
             <input type="range" min="1" max="10" [value]="bus.grid.z" (input)="setZ($event)" class="cfg__range">
             <div class="cfg__range-limits"><span>1</span><span>10 niv</span></div>
           </div>
@@ -194,7 +194,7 @@
           <div class="csv__verdict csv__verdict--ok">
             <span>✓</span>
             <p><b>{{ csvArchivoNombre }} validado correctamente.</b>
-              Publicado en el Bus — listo para iniciar en modo {{ bus.mode === SimMode.DIURNO ? 'diurno' : 'nocturno' }}.</p>
+              Publicado en el Bus, listo para iniciar en modo {{ bus.mode === SimMode.DIURNO ? 'diurno' : 'nocturno' }}.</p>
           </div>
         } @else if (csvEstado === 'errores') {
           <div class="csv__verdict csv__verdict--error">
@@ -209,7 +209,7 @@
 
   <!-- config.json preview -->
   <div class="as-card">
-    <span class="cfg__card-title">Vista previa — config.json</span>
+    <span class="cfg__card-title">Vista previa: config.json</span>
     <pre class="cfg__json">{{ configJson }}</pre>
   </div>
 
