@@ -14,30 +14,44 @@
 
   @if (vista === '2d') {
 
-    <!-- Controls + Grid -->
-    <app-control-bar
-      [running]="bus?.running ?? false"
-      [speed]="(bus?.velocidad ?? 1)"
-      (play)="onPlay()"
-      (pause)="onPause()"
-      (reset)="onReset()"
-      (speedChange)="onSpeedChange($event)"
-    ></app-control-bar>
+    <div class="monitor__body">
 
-    @if (bus) {
-      <div class="monitor__grid">
-        <app-robot-grid
-          [gridZ]="bus.grid.z"
-          [gridTotal]="bus.gridTotal"
-          [interior]="bus.interior"
-          [grilla]="bus.grilla"
-          [robots]="bus.robots"
-          [estaciones]="bus.estaciones"
-          [conveyorsNorte]="bus.conveyorsNorte"
-          [tick]="bus.tick"
-        ></app-robot-grid>
+      <div class="monitor__grid-area">
+
+        <!-- Controls -->
+        <app-control-bar
+          [running]="bus?.running ?? false"
+          [speed]="(bus?.velocidad ?? 1)"
+          (play)="onPlay()"
+          (pause)="onPause()"
+          (reset)="onReset()"
+          (speedChange)="onSpeedChange($event)"
+        ></app-control-bar>
+
+        <!-- Grid -->
+        @if (bus) {
+          <div class="monitor__grid">
+            <app-robot-grid
+              [gridZ]="bus.grid.z"
+              [gridTotal]="bus.gridTotal"
+              [interior]="bus.interior"
+              [grilla]="bus.grilla"
+              [robots]="bus.robots"
+              [estaciones]="bus.estaciones"
+              [conveyorsNorte]="bus.conveyorsNorte"
+              [tick]="bus.tick"
+            ></app-robot-grid>
+          </div>
+        }
+
       </div>
-    }
+
+      <!-- KPI sidebar -->
+      @if (bus) {
+        <app-kpi-sidebar [bus]="bus" class="monitor__kpi-area"></app-kpi-sidebar>
+      }
+
+    </div>
 
   } @else {
 

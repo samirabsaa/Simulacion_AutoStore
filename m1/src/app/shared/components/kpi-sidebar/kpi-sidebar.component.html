@@ -1,0 +1,21 @@
+@if (bus) {
+  <div class="kpi-sidebar">
+    <div class="kpi-sidebar__header">
+      <span class="kpi-sidebar__title">KPIs en vivo</span>
+      <span class="kpi-sidebar__tick mono">Tick #{{ bus.tick }}</span>
+    </div>
+
+    <div class="kpi-sidebar__list">
+      @for (def of kpiDefs; track def.id) {
+        <div class="kpi-sidebar__item" [class.kpi-sidebar__item--inactive]="!isActive(def)">
+          <span class="kpi-sidebar__dot" [style.background]="statusColor(def)"></span>
+          <span class="kpi-sidebar__label">{{ def.code }} · {{ def.id }}</span>
+          <span class="kpi-sidebar__info" [attr.data-tooltip]="def.description">ⓘ</span>
+          <span class="kpi-sidebar__value">{{ displayValue(def) }}</span>
+          <span class="kpi-sidebar__unit">{{ isActive(def) ? def.unit : '' }}</span>
+          <span class="kpi-sidebar__status" [style.color]="statusColor(def)">{{ statusLabel(def) }}</span>
+        </div>
+      }
+    </div>
+  </div>
+}
