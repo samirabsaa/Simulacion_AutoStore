@@ -89,6 +89,18 @@ def snapshot_to_payload(snapshot: StateSnapshot, status: str, velocidad: int) ->
         else None
     )
 
+    # Robots 1×2: el área almacenable es el interior [1..gx]×[1..gy]; el anillo de
+    # tránsito envuelve la grilla (superficie total (gx+2)×(gy+2)). Las estaciones
+    # de despacho están en el anillo Oeste (x=0, OESTE) y Este (x=gx+1, ESTE).
+    estaciones: list[dict[str, Any]] = []
+    grid_total = None
+    if snapshot.config is not None:
+        gx, gy = snapshot.config.grilla.x, snapshot.config.grilla.y
+        grid_total = {"x": gx + 2, "y": gy + 2}
+        for y in range(1, gy + 1):
+            estaciones.append({"x": 0, "y": y, "orientacion": "O"})
+            estaciones.append({"x": gx + 1, "y": y, "orientacion": "E"})
+
     return {
         "type": "tick",
         "tick": snapshot.tick,
@@ -97,6 +109,8 @@ def snapshot_to_payload(snapshot: StateSnapshot, status: str, velocidad: int) ->
         "status": status,
         "velocidad": velocidad,
         "grid": grid,
+        "gridTotal": grid_total,
+        "estaciones": estaciones,
         "robots": [robot_to_dict(r) for r in snapshot.robots],
         "grilla": [caja_to_dict(c) for c in snapshot.grilla],
         "pedidos": {

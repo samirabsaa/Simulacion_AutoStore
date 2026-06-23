@@ -1,17 +1,30 @@
 <div class="occ-heatmap">
   <div class="occ-heatmap__grid" [style.grid-template-columns]="colTemplate">
-    @for (cell of cells; track cell.key + '-' + cell.robotEstado + '-' + cell.robotId) {
-      <div class="occ-heatmap__cell" [style.background]="cell.color">
+    @for (cell of cells; track cell.key + '-' + cell.robotRole + '-' + cell.robotId) {
+      <div class="occ-heatmap__cell"
+           [class.occ-heatmap__cell--ring]="cell.ring"
+           [class.occ-heatmap__cell--station]="cell.station"
+           [style.background]="cell.ring ? null : cell.color">
+
+        @if (cell.station && !cell.hasRobot) {
+          <span class="occ-heatmap__station">{{ cell.station }}</span>
+        }
+
         @if (cell.hasRobot) {
           <div class="occ-heatmap__robot"
+               [class.occ-heatmap__robot--tip]="cell.robotRole === 'tip'"
                [class.occ-heatmap__robot--idle]="cell.robotEstado === 'IDLE'"
                [class.occ-heatmap__robot--moving]="cell.robotEstado === 'MOVING'"
                [class.occ-heatmap__robot--picking]="cell.robotEstado === 'PICKING'"
                [class.occ-heatmap__robot--blocked]="cell.robotEstado === 'BLOCKED'"
                [class.occ-heatmap__robot--depositing]="cell.robotEstado === 'DEPOSITING'"
-               [title]="'R' + cell.robotId + ' · ' + cell.robotEstado">
-            <span class="occ-heatmap__robot-id">R{{ cell.robotId }}</span>
-            <span class="occ-heatmap__robot-state">{{ cell.robotIcon }}</span>
+               [title]="'R' + cell.robotId + ' · ' + cell.robotEstado + ' · ' + cell.robotOri + (cell.robotRole === 'tip' ? ' (punta)' : '')">
+            @if (cell.robotRole === 'body') {
+              <span class="occ-heatmap__robot-id">R{{ cell.robotId }}</span>
+              <span class="occ-heatmap__robot-state">{{ cell.robotIcon }}</span>
+            } @else {
+              <span class="occ-heatmap__robot-tipdot">◆</span>
+            }
           </div>
         }
       </div>
@@ -29,12 +42,20 @@
   </div>
 
   <div class="occ-heatmap__legend occ-heatmap__legend--robots">
-    <span class="occ-heatmap__legend-heading">Robots</span>
+    <span class="occ-heatmap__legend-heading">Robots 1×2 (cuerpo + ◆ punta)</span>
     @for (s of stateLegend; track s.mod) {
       <div class="occ-heatmap__legend-item">
         <span class="occ-heatmap__legend-dot occ-heatmap__legend-dot--{{ s.mod }}"></span>
         <span>{{ s.label }}</span>
       </div>
     }
+    <div class="occ-heatmap__legend-item">
+      <span class="occ-heatmap__legend-swatch occ-heatmap__legend-swatch--ring"></span>
+      <span>Anillo de tránsito</span>
+    </div>
+    <div class="occ-heatmap__legend-item">
+      <span class="occ-heatmap__legend-swatch occ-heatmap__legend-swatch--station">E/O</span>
+      <span>Estaciones de despacho</span>
+    </div>
   </div>
 </div>

@@ -11,6 +11,10 @@ export interface GridConfig {
   sessionName?:     string;
   semilla?:         number;
   pedidosDemandados?: number;
+  // Robots 1×2 con orientación fija: conteo por orientación.
+  robotsNorte?:     number;
+  robotsEste?:      number;
+  robotsOeste?:     number;
 }
 
 export interface GridConfigDTO {
@@ -24,6 +28,9 @@ export interface GridConfigDTO {
   session_name?: string;
   semilla?:      number;
   pedidos_demandados?: number;
+  robots_norte?: number;
+  robots_este?:  number;
+  robots_oeste?: number;
 }
 
 export const DEFAULT_GRID_CONFIG: GridConfig = {
@@ -37,6 +44,9 @@ export const DEFAULT_GRID_CONFIG: GridConfig = {
   sessionName:      'Ejec_FIFO_78pct',
   semilla:          20260506,
   pedidosDemandados: 120,
+  robotsNorte:      2,
+  robotsEste:       3,
+  robotsOeste:      3,
 };
 
 export function toDTO(cfg: GridConfig): GridConfigDTO {
@@ -51,5 +61,8 @@ export function toDTO(cfg: GridConfig): GridConfigDTO {
     session_name:  cfg.sessionName,
     semilla:       cfg.semilla,
     pedidos_demandados: cfg.pedidosDemandados,
+    robots_norte:  cfg.robotsNorte,
+    robots_este:   cfg.robotsEste,
+    robots_oeste:  cfg.robotsOeste,
   };
 }

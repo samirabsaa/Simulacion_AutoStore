@@ -88,6 +88,10 @@ class GridConfigDTO(BaseModel):
     session_name: str | None = None
     semilla: int | None = None
     pedidos_demandados: int | None = None
+    # Robots 1×2 con orientación fija: conteos por orientación (configurable).
+    robots_norte: int | None = None
+    robots_este: int | None = None
+    robots_oeste: int | None = None
 
 
 class PolicyDTO(BaseModel):
@@ -119,6 +123,9 @@ def post_config(cfg: GridConfigDTO) -> dict[str, Any]:
         grilla=GrillaDimensions(x=cfg.x, y=cfg.y, z=cfg.z),
         robots=cfg.num_robots,
         ocupacion_inicial=cfg.occupancy_pct,
+        robots_norte=cfg.robots_norte or 0,
+        robots_este=cfg.robots_este or 0,
+        robots_oeste=cfg.robots_oeste or 0,
     )
     modo = MODO_FROM_M1.get(cfg.mode.upper())
     politica = POLITICA_FROM_M1.get(cfg.policy.upper())

@@ -2,7 +2,7 @@ import { Injectable, OnDestroy } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { SimMode, PickingPolicy, SimStatus } from '../enums/sim.enums';
 import { GridConfig, DEFAULT_GRID_CONFIG } from '../models/grid-config.model';
-import { WsTickPayload, WsSystemErrorPayload, WsRobotState, WsGrillaCell } from '../models/state-bus-snapshot.model';
+import { WsTickPayload, WsSystemErrorPayload, WsRobotState, WsGrillaCell, WsEstacion } from '../models/state-bus-snapshot.model';
 import { SimApiService } from './sim-api.service';
 import { environment } from '../../../environments/environment';
 
@@ -50,6 +50,10 @@ export interface BusState {
   status: SimStatus;
   robots: WsRobotState[];
   grilla: WsGrillaCell[];
+  estaciones: WsEstacion[];
+  robotsNorte: number;
+  robotsEste: number;
+  robotsOeste: number;
 }
 
 export const FORUS_DEFAULTS = {
@@ -57,6 +61,9 @@ export const FORUS_DEFAULTS = {
   numRobots: 8,
   ocupacionInicial: 78,
   pedidosDemandados: 120,
+  robotsNorte: 2,
+  robotsEste: 3,
+  robotsOeste: 3,
 };
 
 const EMPTY_KPIS: KpisComputed = {
@@ -76,7 +83,10 @@ const INITIAL_STATE: BusState = {
   archivoOla: 'no_cargado', archivoReposicion: 'no_cargado',
   falloSistema: null, omniverse: 'headless',
   kpis: { ...EMPTY_KPIS }, status: SimStatus.IDLE,
-  robots: [], grilla: [],
+  robots: [], grilla: [], estaciones: [],
+  robotsNorte: FORUS_DEFAULTS.robotsNorte,
+  robotsEste: FORUS_DEFAULTS.robotsEste,
+  robotsOeste: FORUS_DEFAULTS.robotsOeste,
 };
 
 @Injectable({ providedIn: 'root' })
@@ -162,6 +172,9 @@ export class BusClientService implements OnDestroy {
       grilla: msg.grid != null && Array.isArray(msg.grilla)
         ? msg.grilla
         : (Array.isArray(msg.grilla) && msg.grilla.length > 0 ? msg.grilla : s.grilla),
+      estaciones: msg.grid != null && Array.isArray(msg.estaciones)
+        ? msg.estaciones
+        : (Array.isArray(msg.estaciones) && msg.estaciones.length > 0 ? msg.estaciones : s.estaciones),
       kpis,
     });
 
@@ -227,6 +240,9 @@ export class BusClientService implements OnDestroy {
       numRobots:         FORUS_DEFAULTS.numRobots,
       ocupacionInicial:  FORUS_DEFAULTS.ocupacionInicial,
       pedidosDemandados: FORUS_DEFAULTS.pedidosDemandados,
+      robotsNorte:       FORUS_DEFAULTS.robotsNorte,
+      robotsEste:        FORUS_DEFAULTS.robotsEste,
+      robotsOeste:       FORUS_DEFAULTS.robotsOeste,
     });
   }
 
@@ -259,6 +275,9 @@ export class BusClientService implements OnDestroy {
       sessionName:       s.nombreEjecucion,
       semilla:           s.semilla,
       pedidosDemandados: s.pedidosDemandados,
+      robotsNorte:       s.robotsNorte,
+      robotsEste:        s.robotsEste,
+      robotsOeste:       s.robotsOeste,
     };
   }
 

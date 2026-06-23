@@ -64,19 +64,31 @@
 
       <!-- Flota y carga -->
       <div class="as-card cfg__card">
-        <span class="cfg__card-title">Flota y Carga</span>
+        <span class="cfg__card-title">Flota 1×2 y Carga
+          <span class="mono cfg__slider-val">{{ bus.numRobots }} robots</span>
+        </span>
         <div class="cfg__sliders">
           <div class="cfg__slider-row">
-            <label class="cfg__slider-label">Robots activos <span class="mono cfg__slider-val">{{ bus.numRobots }}</span></label>
-            <input type="range" min="1" max="16" [value]="bus.numRobots" (input)="setR($event)" class="cfg__range">
-            <div class="cfg__range-limits"><span>1</span><span>16</span></div>
+            <label class="cfg__slider-label">▲ Robots NORTE (excavan y colaboran) <span class="mono cfg__slider-val">{{ bus.robotsNorte }}</span></label>
+            <input type="range" min="0" max="8" [value]="bus.robotsNorte" (input)="setRN($event)" class="cfg__range">
+            <div class="cfg__range-limits"><span>0</span><span>8</span></div>
+          </div>
+          <div class="cfg__slider-row">
+            <label class="cfg__slider-label">▶ Robots ESTE (entregan estación Este) <span class="mono cfg__slider-val">{{ bus.robotsEste }}</span></label>
+            <input type="range" min="0" max="8" [value]="bus.robotsEste" (input)="setRE($event)" class="cfg__range">
+            <div class="cfg__range-limits"><span>0</span><span>8</span></div>
+          </div>
+          <div class="cfg__slider-row">
+            <label class="cfg__slider-label">◀ Robots OESTE (entregan estación Oeste) <span class="mono cfg__slider-val">{{ bus.robotsOeste }}</span></label>
+            <input type="range" min="0" max="8" [value]="bus.robotsOeste" (input)="setRO($event)" class="cfg__range">
+            <div class="cfg__range-limits"><span>0</span><span>8</span></div>
           </div>
           <div class="cfg__slider-row">
             <label class="cfg__slider-label">Ocupación inicial <span class="mono cfg__slider-val">{{ bus.ocupacionInicial }}%</span></label>
             <input type="range" min="20" max="95" [value]="bus.ocupacionInicial" (input)="setOcc($event)" class="cfg__range">
             <div class="cfg__range-limits"><span>20%</span><span>95%</span></div>
           </div>
-          <p class="cfg__hint-text">Valores por defecto Forus S.A.: grilla 12×10×5, 8 robots, 78% ocupación.</p>
+          <p class="cfg__hint-text">Robots 1×2 de orientación fija. NORTE no entrega: excava y cede la caja a un E/O (colaboración). Por defecto Forus S.A.: 2 N, 3 E, 3 O = 8 robots, 78% ocupación.</p>
         </div>
       </div>
 

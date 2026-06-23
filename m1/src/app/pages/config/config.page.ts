@@ -46,6 +46,18 @@ export class ConfigPage implements OnInit, OnDestroy {
   setR(e: Event)   { this.busService.setField({ numRobots:        +(<HTMLInputElement>e.target).value }); }
   setOcc(e: Event) { this.busService.setField({ ocupacionInicial: +(<HTMLInputElement>e.target).value }); }
 
+  // Robots 1×2 con orientación fija: al cambiar un conteo, numRobots = suma.
+  private setOrientacion(parcial: { robotsNorte?: number; robotsEste?: number; robotsOeste?: number }) {
+    const s = this.busService.state;
+    const n = parcial.robotsNorte ?? s.robotsNorte;
+    const e = parcial.robotsEste  ?? s.robotsEste;
+    const o = parcial.robotsOeste ?? s.robotsOeste;
+    this.busService.setField({ ...parcial, numRobots: n + e + o });
+  }
+  setRN(e: Event) { this.setOrientacion({ robotsNorte: +(<HTMLInputElement>e.target).value }); }
+  setRE(e: Event) { this.setOrientacion({ robotsEste:  +(<HTMLInputElement>e.target).value }); }
+  setRO(e: Event) { this.setOrientacion({ robotsOeste: +(<HTMLInputElement>e.target).value }); }
+
   setNombre(e: Event)  { this.busService.setField({ nombreEjecucion: (<HTMLInputElement>e.target).value }); }
   setSemilla(e: Event) { this.busService.setField({ semilla: +(<HTMLInputElement>e.target).value || 0 }); }
   randomSemilla()      { this.busService.setField({ semilla: Math.floor(Math.random() * 9e7) + 1e7 }); }
@@ -145,6 +157,7 @@ export class ConfigPage implements OnInit, OnDestroy {
       nombre_ejecucion: b.nombreEjecucion,
       grilla: b.grid,
       robots_activos: b.numRobots,
+      robots_orientacion: { norte: b.robotsNorte, este: b.robotsEste, oeste: b.robotsOeste },
       ocupacion_inicial_pct: b.ocupacionInicial,
       semilla: b.semilla,
       modo_turno: b.mode === SimMode.DIURNO ? 'diurno_picking' : 'nocturno_reposicion',

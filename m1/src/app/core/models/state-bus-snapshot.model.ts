@@ -2,12 +2,19 @@
 // Cada mensaje en ws://localhost:8000/ws/state tiene este formato.
 
 export interface WsRobotState {
-  id:       number;
-  x:        number;
-  y:        number;
-  z:        number;
-  estado:   string;
-  carga_id: string | null;
+  id:           number;
+  x:            number;
+  y:            number;
+  z:            number;
+  estado:       string;
+  carga_id:     string | null;
+  orientacion?: string;   // 'N' | 'E' | 'O' — robots 1×2 con orientación fija
+}
+
+export interface WsEstacion {
+  x:           number;
+  y:           number;
+  orientacion: string;    // 'E' (borde Este) | 'O' (borde Oeste)
 }
 
 export interface WsGrillaCell {
@@ -37,6 +44,8 @@ export interface WsTickPayload {
   status:    string;
   velocidad: number;
   grid:      { x: number; y: number; z: number } | null;
+  gridTotal?: { x: number; y: number } | null;   // superficie con anillo: (x+2)×(y+2)
+  estaciones?: WsEstacion[];
   robots:    WsRobotState[];
   grilla:    WsGrillaCell[];
   pedidos:   { cola: unknown[]; completados: unknown[] };
