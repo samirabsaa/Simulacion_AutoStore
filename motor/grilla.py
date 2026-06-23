@@ -177,6 +177,12 @@ class Grilla:
         candidatas = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
         return [(cx, cy) for cx, cy in candidatas if self.es_interior(cx, cy)]
 
+    def celdas_adyacentes_superficie(self, x: int, y: int) -> list[tuple[int, int]]:
+        """Celdas vecinas (ortogonales) dentro de la superficie transitable total,
+        incluyendo el anillo. Para el desplazamiento de robots (no para cajas)."""
+        candidatas = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+        return [(cx, cy) for cx, cy in candidatas if self.en_superficie(cx, cy)]
+
     # ------------------------------------------------------------------
     # Búsqueda por SKU (T-10) — para el despachador
     # ------------------------------------------------------------------

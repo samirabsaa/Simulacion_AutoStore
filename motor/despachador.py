@@ -25,6 +25,9 @@ from bus_persistencia.models.state import (
     PoliticaPicking,
     Robot,
     RobotEstado,
+    celdas_desde,
+    celdas_robot,
+    cuerpo_para_punta_en,
 )
 from motor.colmena import (
     COSTO_ROTACION_TICKS,
@@ -162,6 +165,10 @@ class Despachador:
         ]
         for robot in robots_estado.values():
             if robot.estado == RobotEstado.INACTIVO and robot.id not in self._tareas:
+                # Robots NORTE no entregan en estación: por ahora no reciben tareas
+                # de picking (colaboran vía handoff — Fase 5). Solo E/O reciben pedidos.
+                if robot.orientacion == Orientacion.NORTE:
+                    continue
                 pedido = politica_fn(pedidos_disponibles, self.grilla, self.grilla.puertos)
                 if pedido is None:
                     continue
@@ -172,10 +179,8 @@ class Despachador:
                 self._tareas[robot.id] = tarea
                 pedidos_disponibles.remove(pedido)
 
-        # Paso 2: posiciones actuales para detección de colisiones XY
-        posiciones_actuales: dict[tuple[int, int], int] = {
-            (r.x, r.y): r.id for r in robots_estado.values()
-        }
+        # Paso 2: mapa de ocupación (ambas celdas de cada robot 1×2) para colisiones
+        posiciones_actuales: dict[tuple[int, int], int] = _mapa_ocupacion(robots_estado)
         self.reservation_table.sembrar(posiciones_actuales)
 
         # Paso 2.4: Mente Colmena — handoff de orientación (Feature 4).
@@ -198,80 +203,66 @@ class Despachador:
                 siguiente = tarea.ruta_salida[0]
             else:
                 continue
-            ocupante_id = posiciones_actuales.get(siguiente)
-            if ocupante_id is None:
-                continue
-            ocupante = robots_estado.get(ocupante_id)
-            if ocupante is None or ocupante.estado != RobotEstado.INACTIVO:
-                continue
-            if ocupante_id in self._tareas:
-                continue
-            moved = _intentar_ceder_paso(
-                ocupante, robot.id, robots_estado, posiciones_actuales,
-                self._tareas, self.grilla, robots_modificados, eventos,
-                depth=2,
-            )
-            if moved:
-                continue
+            # Cualquier celda del footprint destino puede estar ocupada por un
+            # robot ocioso (ej. su punta sobre la celda-estación). Apartarlo todo.
+            next_cells = celdas_desde(siguiente[0], siguiente[1], robot.orientacion)
+            for celda in next_cells:
+                ocupante_id = posiciones_actuales.get(celda)
+                if ocupante_id is None or ocupante_id == robot.id:
+                    continue
+                ocupante = robots_estado.get(ocupante_id)
+                if ocupante is None or ocupante.estado != RobotEstado.INACTIVO:
+                    continue
+                if ocupante_id in self._tareas:
+                    continue
+                _intentar_ceder_paso(
+                    ocupante, robot.id, robots_estado, posiciones_actuales,
+                    self._tareas, self.grilla, robots_modificados, eventos,
+                    depth=2,
+                )
 
-        # Paso 2.6: Resolver interbloqueo — dos robots BLOQUEADOS que
-        #           ocupan cada uno la celda destino del otro (swap)
-        robots_movidos_swap: set[int] = set()
-        for robot in list(robots_estado.values()):
-            if robot.id in robots_movidos_swap:
-                continue
+        # Paso 2.6: Ruptura de deadlock por nudge footprint-aware.
+        # Con robots 1×2 de orientación fija, dos robots tareados pueden bloquearse
+        # mutuamente en una "calle" (ej. uno parado sobre la celda-cuerpo de entrega
+        # del otro). El swap directo es inseguro con footprints, así que en su lugar
+        # se EMPUJA al robot bloqueador hacia una celda libre adyacente (típicamente
+        # el anillo) y se recalcula su ruta. Determinista: itera por id ascendente.
+        robots_movidos_swap: set[int] = set()  # reservado (compat. Paso 3)
+        nudged: set[int] = set()
+        for robot in sorted(robots_estado.values(), key=lambda r: r.id):
             tarea = self._tareas.get(robot.id)
             if tarea is None or robot.estado != RobotEstado.BLOQUEADO:
                 continue
             if tarea.fase == "mover_a_objetivo" and tarea.ruta_entrada:
                 siguiente = tarea.ruta_entrada[0]
-                ruta_robot = tarea.ruta_entrada
             elif tarea.fase == "mover_a_puerto" and tarea.ruta_salida:
                 siguiente = tarea.ruta_salida[0]
-                ruta_robot = tarea.ruta_salida
             else:
                 continue
-            ocupante_id = posiciones_actuales.get(siguiente)
-            if ocupante_id is None or ocupante_id == robot.id:
+            # Celdas del footprint que el robot necesita libres para avanzar.
+            next_cells = celdas_desde(siguiente[0], siguiente[1], robot.orientacion)
+            bloqueador_id = next(
+                (posiciones_actuales[c] for c in next_cells
+                 if posiciones_actuales.get(c) not in (None, robot.id)),
+                None,
+            )
+            if bloqueador_id is None or bloqueador_id in nudged:
                 continue
-            ocupante = robots_estado.get(ocupante_id)
-            if ocupante is None or ocupante.estado != RobotEstado.BLOQUEADO:
+            b = robots_estado.get(bloqueador_id)
+            if b is None:
                 continue
-            otarea = self._tareas.get(ocupante_id)
-            if otarea is None:
-                continue
-            if otarea.fase == "mover_a_objetivo" and otarea.ruta_entrada:
-                o_siguiente = otarea.ruta_entrada[0]
-                ruta_ocupante = otarea.ruta_entrada
-            elif otarea.fase == "mover_a_puerto" and otarea.ruta_salida:
-                o_siguiente = otarea.ruta_salida[0]
-                ruta_ocupante = otarea.ruta_salida
-            else:
-                continue
-            if o_siguiente != (robot.x, robot.y):
-                continue
-            # Ambos quieren la posición del otro → intercambiar
-            posiciones_actuales.pop((robot.x, robot.y), None)
-            posiciones_actuales.pop((siguiente), None)
-            posiciones_actuales[(robot.x, robot.y)] = ocupante_id
-            posiciones_actuales[(siguiente)] = robot.id
-
-            r_a = Robot(id=robot.id, x=siguiente[0], y=siguiente[1], z=robot.z,
-                        estado=RobotEstado.DESPLAZANDOSE, carga_id=robot.carga_id,
-                        orientacion=robot.orientacion)
-            r_b = Robot(id=ocupante_id, x=robot.x, y=robot.y, z=0,
-                        estado=RobotEstado.DESPLAZANDOSE, carga_id=ocupante.carga_id,
-                        orientacion=ocupante.orientacion)
-            robots_estado[robot.id] = r_a
-            robots_estado[ocupante_id] = r_b
-            robots_modificados.append(r_a)
-            robots_modificados.append(r_b)
-            eventos.append(_ev_movimiento(r_a))
-            eventos.append(_ev_movimiento(r_b))
-            ruta_robot.pop(0)
-            ruta_ocupante.pop(0)
-            acum.total_desplazamientos += 2
-            robots_movidos_swap.update((robot.id, ocupante_id))
+            # Empujar al bloqueador (tareado u ocioso) fuera del footprint que el
+            # robot necesita. Un bloqueador ocioso solo se aparta; uno tareado
+            # además recalcula su ruta.
+            btarea = self._tareas.get(bloqueador_id)
+            evitar = set(celdas_robot(robot)) | set(next_cells)
+            movido = _nudge_robot(
+                b, btarea, robots_estado, posiciones_actuales,
+                self.grilla, eventos, evitar, acum,
+            )
+            if movido is not None:
+                robots_modificados.append(movido)
+                nudged.add(b.id)
 
         # Paso 2.9: Coordinación de escorts en excavación (anti-livelock @95%).
         # Mide progreso neto y replanifica la asignación de columnas-escort por
@@ -310,10 +301,9 @@ class Despachador:
             )
 
             if nuevo.id != robot.id or nuevo != robot:
-                # Actualizar posición en el mapa de colisiones si se movió
+                # Actualizar el footprint (2 celdas) en el mapa si se movió
                 if (nuevo.x, nuevo.y) != (robot.x, robot.y):
-                    posiciones_actuales.pop((robot.x, robot.y), None)
-                    posiciones_actuales[(nuevo.x, nuevo.y)] = nuevo.id
+                    _mover_en_mapa(posiciones_actuales, robot, nuevo)
                 robots_estado[robot.id] = nuevo
                 robots_modificados.append(nuevo)
 
@@ -356,20 +346,30 @@ class Despachador:
         return min(candidatas, key=costo_excavacion)
 
     def _crear_tarea(self, robot: Robot, pedido: Pedido) -> Tarea | None:
-        """Busca una caja no reservada y genera la ruta. Retorna None si no hay."""
+        """Busca una caja no reservada y genera la ruta para un robot 1×2.
+
+        Estacionamiento por punta: el robot lleva su CUERPO a la celda adyacente
+        tal que su PUNTA quede sobre la columna objetivo (para excavar/recuperar)
+        y, al entregar, sobre la celda-estación. La estación debe ser compatible
+        con la orientación fija del robot. Retorna None si no hay caja/estación."""
         caja = self._caja_disponible(pedido.id_sku)
         if caja is None:
             return None
 
-        # Destino de entrega: estación más cercana (Feature 2) o puerto clásico.
-        estacion = self._estacion_mas_cercana(caja.x, caja.y)
-        if estacion is not None:
-            puerto = (estacion.x, estacion.y)
-        else:
-            puerto = self.grilla.puerto_mas_cercano(caja.x, caja.y)
+        # Estación de entrega compatible con la orientación del robot (E/O).
+        estacion = self.grilla.estacion_compatible_mas_cercana(
+            caja.x, caja.y, robot.orientacion
+        )
+        if estacion is None:
+            return None  # sin estación compatible (p.ej. NORTE): no se asigna aquí
 
-        ruta_entrada = _ruta_xy((robot.x, robot.y), (caja.x, caja.y))
-        ruta_salida = _ruta_xy((caja.x, caja.y), puerto)
+        # Cuerpo-objetivo de pick: la punta debe caer sobre la columna de la caja.
+        cuerpo_pick = cuerpo_para_punta_en(caja.x, caja.y, robot.orientacion)
+        # Cuerpo-objetivo de entrega: la punta debe caer sobre la celda-estación.
+        cuerpo_entrega = cuerpo_para_punta_en(estacion.x, estacion.y, robot.orientacion)
+
+        ruta_entrada = _ruta_xy((robot.x, robot.y), cuerpo_pick)
+        ruta_salida = _ruta_xy(cuerpo_pick, cuerpo_entrega)
 
         self._cajas_reservadas.add((caja.x, caja.y, caja.z))
 
@@ -378,7 +378,7 @@ class Despachador:
             caja_objetivo=caja,
             ruta_entrada=ruta_entrada,
             ruta_salida=ruta_salida,
-            puerto=puerto,
+            puerto=cuerpo_entrega,
             estacion=estacion,
         )
 
@@ -425,24 +425,21 @@ class Despachador:
             return self._fase_excavar(robot, tarea, acum)
 
         siguiente = tarea.ruta_entrada[0]
-        if _celda_ocupada(siguiente, robot.id, posiciones_actuales):
+        if not _footprint_libre(siguiente, robot.orientacion, robot.id, posiciones_actuales, self.grilla):
             tarea.ticks_bloqueado_consecutivos += 1
             if tarea.ticks_bloqueado_consecutivos >= UMBRAL_RERUTA:
-                destino = (tarea.caja_objetivo.x, tarea.caja_objetivo.y)
-                evitar_celdas = {
-                    pos for pos, rid in posiciones_actuales.items()
-                    if rid != robot.id
-                }
-                gx = self.grilla.config.grilla.x
-                gy = self.grilla.config.grilla.y
+                destino = cuerpo_para_punta_en(
+                    tarea.caja_objetivo.x, tarea.caja_objetivo.y, robot.orientacion
+                )
                 nueva_ruta = _ruta_xy_evitando(
-                    (robot.x, robot.y), destino, evitar_celdas, gx, gy
+                    (robot.x, robot.y), destino, robot.orientacion,
+                    robot.id, posiciones_actuales, self.grilla,
                 )
                 if nueva_ruta is not None and nueva_ruta != tarea.ruta_entrada:
                     tarea.ruta_entrada = list(nueva_ruta)
                     tarea.ticks_bloqueado_consecutivos = 0
                     paso = tarea.ruta_entrada[0] if tarea.ruta_entrada else None
-                    if paso and not _celda_ocupada(paso, robot.id, posiciones_actuales):
+                    if paso and _footprint_libre(paso, robot.orientacion, robot.id, posiciones_actuales, self.grilla):
                         tarea.ruta_entrada.pop(0)
                         acum.total_desplazamientos += 1
                         nuevo = Robot(id=robot.id, x=paso[0], y=paso[1], z=robot.z,
@@ -566,23 +563,18 @@ class Despachador:
             return self._fase_entregar(robot, tarea, acum)
 
         siguiente = tarea.ruta_salida[0]
-        if _celda_ocupada(siguiente, robot.id, posiciones_actuales):
+        if not _footprint_libre(siguiente, robot.orientacion, robot.id, posiciones_actuales, self.grilla):
             tarea.ticks_bloqueado_consecutivos += 1
             if tarea.ticks_bloqueado_consecutivos >= UMBRAL_RERUTA:
-                evitar_celdas = {
-                    pos for pos, rid in posiciones_actuales.items()
-                    if rid != robot.id
-                }
-                gx = self.grilla.config.grilla.x
-                gy = self.grilla.config.grilla.y
                 nueva_ruta = _ruta_xy_evitando(
-                    (robot.x, robot.y), tarea.puerto, evitar_celdas, gx, gy
+                    (robot.x, robot.y), tarea.puerto, robot.orientacion,
+                    robot.id, posiciones_actuales, self.grilla,
                 )
                 if nueva_ruta is not None and nueva_ruta != tarea.ruta_salida:
                     tarea.ruta_salida = list(nueva_ruta)
                     tarea.ticks_bloqueado_consecutivos = 0
                     paso = tarea.ruta_salida[0] if tarea.ruta_salida else None
-                    if paso and not _celda_ocupada(paso, robot.id, posiciones_actuales):
+                    if paso and _footprint_libre(paso, robot.orientacion, robot.id, posiciones_actuales, self.grilla):
                         tarea.ruta_salida.pop(0)
                         acum.total_desplazamientos += 1
                         nuevo = Robot(id=robot.id, x=paso[0], y=paso[1], z=robot.z,
@@ -624,24 +616,18 @@ class Despachador:
                     "estacion": est.id, "capacidad": est.capacidad_tick,
                 }]
 
-            # 2) Orientación: el robot debe encarar la orientación requerida.
-            #    Si no coincide, gira (cuesta COSTO_ROTACION_TICKS) antes de entregar.
+            # 2) Orientación: el robot NUNCA rota. La estación se eligió compatible
+            #    con su orientación fija, así que aquí debe coincidir siempre. Si no
+            #    coincide (caso defensivo), el robot no puede entregar: espera.
             if robot.orientacion != est.orientacion_requerida:
-                if tarea.ticks_rotando < COSTO_ROTACION_TICKS:
-                    tarea.ticks_rotando += 1
-                    nuevo = _cambiar_estado(robot, RobotEstado.ROTANDO)
-                    return nuevo, [], [], None, [{
-                        "tipo": "rotacion", "robot_id": robot.id,
-                        "de": robot.orientacion.value,
-                        "a": est.orientacion_requerida.value,
-                        "estacion": est.id,
-                    }]
-                # Rotación completada: fijar la nueva orientación y continuar.
-                robot = _cambiar_estado(
-                    robot, RobotEstado.ENTREGANDO,
-                    orientacion=est.orientacion_requerida,
-                )
-                tarea.ticks_rotando = 0
+                acum.ticks_bloqueados += 1
+                nuevo = _cambiar_estado(robot, RobotEstado.BLOQUEADO)
+                return nuevo, [], [], None, [{
+                    "tipo": "orientacion_incompatible", "robot_id": robot.id,
+                    "estacion": est.id,
+                    "orientacion_robot": robot.orientacion.value,
+                    "orientacion_requerida": est.orientacion_requerida.value,
+                }]
 
             # 3) Entrega efectiva: consume una unidad de capacidad de la estación.
             self._servidos[est.id] = self._servidos.get(est.id, 0) + 1
@@ -783,15 +769,17 @@ def _ruta_xy(origen: tuple[int, int], destino: tuple[int, int]) -> list[tuple[in
 def _ruta_xy_evitando(
     origen: tuple[int, int],
     destino: tuple[int, int],
-    evitar: set[tuple[int, int]],
-    gx: int,
-    gy: int,
+    orientacion: Orientacion,
+    robot_id: int,
+    posiciones: dict[tuple[int, int], int],
+    grilla: "Grilla",
 ) -> list[tuple[int, int]] | None:
-    """BFS corta que busca ruta XY rodeando las celdas en `evitar`.
+    """BFS corta sobre posiciones del CUERPO que rodea robots ocupando celdas.
 
-    Retorna la lista de pasos (sin incluir el origen) o None si no hay ruta.
-    El límite de profundidad es 2× la distancia Manhattan para no explorar toda
-    la grilla en el caso degenerado."""
+    Cada paso valida que el footprint 1×2 completo (cuerpo + punta) quepa en la
+    superficie y no choque con otro robot. Retorna la lista de pasos del cuerpo
+    (sin incluir el origen) o None si no hay ruta. Límite de profundidad 2× la
+    distancia Manhattan."""
     from collections import deque
 
     if origen == destino:
@@ -806,15 +794,13 @@ def _ruta_xy_evitando(
         if len(camino) >= max_depth:
             continue
         for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
-            if not (0 <= nx < gx and 0 <= ny < gy):
-                continue
             if (nx, ny) in visitados:
+                continue
+            if not _footprint_libre((nx, ny), orientacion, robot_id, posiciones, grilla):
                 continue
             nuevo_camino = camino + [(nx, ny)]
             if (nx, ny) == destino:
                 return nuevo_camino
-            if (nx, ny) in evitar:
-                continue
             visitados.add((nx, ny))
             queue.append(((nx, ny), nuevo_camino))
     return None
@@ -833,21 +819,22 @@ def _intentar_ceder_paso(
 ) -> bool:
     """Move an idle robot out of the way. If no free adjacent cell and depth > 1,
     recursively push an idle neighbor first (cascading yield)."""
-    excluir = {(ocupante.x, ocupante.y)}
-    for ax, ay in grilla.columnas_adyacentes(ocupante.x, ocupante.y):
-        if (ax, ay) not in posiciones_actuales:
-            posiciones_actuales.pop((ocupante.x, ocupante.y), None)
-            posiciones_actuales[(ax, ay)] = ocupante.id
+    # Mueve el footprint 1×2 del robot ocioso a una celda-cuerpo adyacente donde
+    # quepa entero (orientación fija). Primero busca un cuerpo libre directo.
+    for ax, ay in grilla.celdas_adyacentes_superficie(ocupante.x, ocupante.y):
+        if _footprint_libre((ax, ay), ocupante.orientacion, ocupante.id, posiciones_actuales, grilla):
             nuevo = Robot(id=ocupante.id, x=ax, y=ay, z=0,
                           estado=RobotEstado.INACTIVO, carga_id=None,
                           orientacion=ocupante.orientacion)
+            _mover_en_mapa(posiciones_actuales, ocupante, nuevo)
             robots_estado[ocupante.id] = nuevo
             robots_modificados.append(nuevo)
             eventos.append(_ev_movimiento(nuevo))
             return True
     if depth <= 1:
         return False
-    for ax, ay in grilla.columnas_adyacentes(ocupante.x, ocupante.y):
+    # Cascada: empuja a un vecino ocioso para liberar espacio y luego muévete.
+    for ax, ay in grilla.celdas_adyacentes_superficie(ocupante.x, ocupante.y):
         vecino_id = posiciones_actuales.get((ax, ay))
         if vecino_id is None or vecino_id == solicitante_id or vecino_id == ocupante.id:
             continue
@@ -856,26 +843,102 @@ def _intentar_ceder_paso(
             continue
         if _intentar_ceder_paso(vecino, ocupante.id, robots_estado, posiciones_actuales,
                                 tareas, grilla, robots_modificados, eventos, depth=depth - 1):
-            posiciones_actuales.pop((ocupante.x, ocupante.y), None)
-            posiciones_actuales[(ax, ay)] = ocupante.id
-            nuevo = Robot(id=ocupante.id, x=ax, y=ay, z=0,
-                          estado=RobotEstado.INACTIVO, carga_id=None,
-                          orientacion=ocupante.orientacion)
-            robots_estado[ocupante.id] = nuevo
-            robots_modificados.append(nuevo)
-            eventos.append(_ev_movimiento(nuevo))
-            return True
+            if _footprint_libre((ax, ay), ocupante.orientacion, ocupante.id, posiciones_actuales, grilla):
+                nuevo = Robot(id=ocupante.id, x=ax, y=ay, z=0,
+                              estado=RobotEstado.INACTIVO, carga_id=None,
+                              orientacion=ocupante.orientacion)
+                _mover_en_mapa(posiciones_actuales, ocupante, nuevo)
+                robots_estado[ocupante.id] = nuevo
+                robots_modificados.append(nuevo)
+                eventos.append(_ev_movimiento(nuevo))
+                return True
     return False
 
 
-def _celda_ocupada(
-    xy: tuple[int, int],
+def _mapa_ocupacion(robots: dict[int, Robot]) -> dict[tuple[int, int], int]:
+    """Mapa celda → robot_id que incluye AMBAS celdas (cuerpo + punta) de cada
+    robot 1×2. Base para la detección de colisiones por footprint."""
+    mapa: dict[tuple[int, int], int] = {}
+    for r in robots.values():
+        for celda in celdas_robot(r):
+            mapa[celda] = r.id
+    return mapa
+
+
+def _footprint_libre(
+    body: tuple[int, int],
+    orientacion: Orientacion,
     robot_id: int,
     posiciones: dict[tuple[int, int], int],
+    grilla: "Grilla",
 ) -> bool:
-    """Retorna True si la celda XY está ocupada por un robot distinto al dado."""
-    ocupante = posiciones.get(xy)
-    return ocupante is not None and ocupante != robot_id
+    """True si un robot con la orientación dada puede colocar su cuerpo en `body`:
+    ambas celdas del footprint están dentro de la superficie y libres (o son del
+    propio robot)."""
+    for (cx, cy) in celdas_desde(body[0], body[1], orientacion):
+        if not grilla.en_superficie(cx, cy):
+            return False
+        ocupante = posiciones.get((cx, cy))
+        if ocupante is not None and ocupante != robot_id:
+            return False
+    return True
+
+
+def _mover_en_mapa(
+    posiciones: dict[tuple[int, int], int], viejo: Robot, nuevo: Robot
+) -> None:
+    """Actualiza el mapa de ocupación al mover un robot: libera las celdas del
+    footprint anterior (si eran suyas) y ocupa las del nuevo."""
+    for celda in celdas_robot(viejo):
+        if posiciones.get(celda) == viejo.id:
+            del posiciones[celda]
+    for celda in celdas_robot(nuevo):
+        posiciones[celda] = nuevo.id
+
+
+def _nudge_robot(
+    robot: Robot,
+    tarea: "Tarea | None",
+    robots_estado: dict[int, Robot],
+    posiciones: dict[tuple[int, int], int],
+    grilla: "Grilla",
+    eventos: list[dict],
+    evitar: set[tuple[int, int]],
+    acum: "Acumuladores",
+) -> Robot | None:
+    """Empuja un robot a una celda-cuerpo adyacente libre (sin entrar en `evitar`).
+    Si está tareado, recalcula la ruta de su fase; si está ocioso (tarea None),
+    solo se aparta. Rompe deadlocks frontales.
+
+    Retorna el robot actualizado, o None si no hay celda libre donde apartarse."""
+    ocioso = tarea is None
+    estado = RobotEstado.INACTIVO if ocioso else RobotEstado.DESPLAZANDOSE
+    for ax, ay in grilla.celdas_adyacentes_superficie(robot.x, robot.y):
+        celdas_nuevas = celdas_desde(ax, ay, robot.orientacion)
+        if any(c in evitar for c in celdas_nuevas):
+            continue
+        if not _footprint_libre((ax, ay), robot.orientacion, robot.id, posiciones, grilla):
+            continue
+        nuevo = Robot(id=robot.id, x=ax, y=ay, z=robot.z,
+                      estado=estado,
+                      carga_id=None if ocioso else robot.carga_id,
+                      orientacion=robot.orientacion)
+        _mover_en_mapa(posiciones, robot, nuevo)
+        robots_estado[robot.id] = nuevo
+        if not ocioso:
+            acum.total_desplazamientos += 1
+            # Recalcular la ruta de la fase desde la nueva posición del cuerpo.
+            if tarea.fase == "mover_a_objetivo":
+                destino = cuerpo_para_punta_en(
+                    tarea.caja_objetivo.x, tarea.caja_objetivo.y, robot.orientacion
+                )
+                tarea.ruta_entrada = _ruta_xy((ax, ay), destino)
+            elif tarea.fase == "mover_a_puerto":
+                tarea.ruta_salida = _ruta_xy((ax, ay), tarea.puerto)
+            tarea.ticks_bloqueado_consecutivos = 0
+        eventos.append(_ev_movimiento(nuevo))
+        return nuevo
+    return None
 
 
 def _cambiar_estado(

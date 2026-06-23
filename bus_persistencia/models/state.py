@@ -174,6 +174,16 @@ def celdas_desde(x: int, y: int, orientacion: Orientacion) -> list[tuple[int, in
     return [(x, y), punta_desde(x, y, orientacion)]
 
 
+def cuerpo_para_punta_en(tx: int, ty: int, orientacion: Orientacion) -> tuple[int, int]:
+    """Celda-cuerpo (ancla) tal que la punta de un robot con la orientación dada
+    quede sobre (tx, ty). Inverso de `punta_desde`.
+
+    Sirve para estacionar: para excavar/entregar sobre la columna/estación (tx,ty),
+    el robot debe llevar su cuerpo a la celda que retorna esta función."""
+    dx, dy = _PUNTA_OFFSET[orientacion]
+    return (tx - dx, ty - dy)
+
+
 @dataclass(frozen=True)
 class Pedido:
     id_pedido: str
