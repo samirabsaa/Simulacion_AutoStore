@@ -295,3 +295,32 @@ def get_report_sesion():
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={path.name}"},
     )
+
+
+@app.get("/report/m3")
+def get_report_m3():
+    """Exporta la timeline completa de la simulación como JSON para M3 (Omniverse)."""
+    export = loop.get_m3_export()
+    if not export["timeline"]:
+        raise HTTPException(
+            404,
+            "No hay datos de simulación. Ejecute una simulación completa primero.",
+        )
+    import json
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    path = OUTPUT_DIR / "export_m3.json"
+    path.write_text(json.dumps(export, ensure_ascii=False, indent=2), encoding="utf-8")
+    return FileResponse(
+        path,
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=export_m3.json"},
+    )
+
+
+@app.get("/report/status")
+def get_report_status():
+    """Estado de las ejecuciones terminadas para el frontend."""
+    return {
+        "finished_runs": len(loop.finished_runs),
+        "needed_for_comparativo": 2,
+    }

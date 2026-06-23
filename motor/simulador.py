@@ -73,9 +73,16 @@ class AutoStoreSimulator:
         self._eventos_pendientes: list[dict] = []
         self._modo_pendiente: ModoTurno | None = None
 
+        # Eventos del último tick (para exportación M3)
+        self._last_tick_eventos: list[dict] = []
+
     # ------------------------------------------------------------------
     # Inicialización (T-09, T-11, T-23)
     # ------------------------------------------------------------------
+
+    @property
+    def last_tick_eventos(self) -> list[dict]:
+        return self._last_tick_eventos
 
     def inicializar_desde_bus(self, seed: int | None = None) -> None:
         """Lee la config del bus, construye la grilla y los robots.
@@ -335,6 +342,8 @@ class AutoStoreSimulator:
             g_delta, g_remove = self._grilla.flush_delta()
             self._grilla_delta.extend(g_delta)
             self._grilla_remove.extend(g_remove)
+
+        self._last_tick_eventos = list(self._eventos_pendientes)
 
         delta = TickDelta(
             grilla_delta=self._grilla_delta or None,
