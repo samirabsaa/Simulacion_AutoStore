@@ -25,7 +25,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   readonly nav: NavItem[] = [
     { key: 'panel',    path: '/panel',    icon: 'grid-outline',        label: 'Panel de Estados'              },
-    { key: 'monitor',  path: '/monitor',  icon: 'easel-outline',       label: 'Monitor Simulación (2D/3D)'   },
+    { key: 'monitor',  path: '/monitor',  icon: 'easel-outline',       label: 'Monitor Simulación'   },
     { key: 'reportes', path: '/reportes', icon: 'bar-chart-outline',   label: 'Datos Estadísticos'          },
     { key: 'config',   path: '/config',   icon: 'settings-outline',    label: 'Configuración'               },
   ];
